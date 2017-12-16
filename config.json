@@ -1,0 +1,10 @@
+{
+    "Addr": "0.0.0.0",
+    "Port": 22,
+    "AllowAnon": false,
+    "UserList": {
+        "testuser": "tige",
+        "miho": "panzer",
+        "root": "*"
+    }
+}
