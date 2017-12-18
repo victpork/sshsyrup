@@ -1,10 +1,11 @@
 {
-    "Addr": "0.0.0.0",
-    "Port": 22,
-    "AllowAnon": false,
-    "UserList": {
+    "server.addr": "0.0.0.0",
+    "server.port": 22,
+    "server.allowRandomUser": false,
+    "server.userList": {
         "testuser": "tige",
         "miho": "panzer",
         "root": "*"
-    }
+    },
+    "asciinema.apiKey": "fdsfksdfdkfldsfds"
 }

@@ -20,16 +20,16 @@ type SSHSession struct {
 	clientVersion string
 	activity      chan bool
 	sshChan       <-chan ssh.NewChannel
-	ptyReq        *PtyRequest
+	ptyReq        *ptyRequest
 	term          *terminal.Terminal
 }
 
-type EnvRequest struct {
+type envRequest struct {
 	Name  string
 	Value string
 }
 
-type PtyRequest struct {
+type ptyRequest struct {
 	Term    string
 	Width   uint32
 	Height  uint32
@@ -37,11 +37,12 @@ type PtyRequest struct {
 	PHeight uint32
 	Modes   []uint8
 }
-type WinChgRequest struct {
+type winChgRequest struct {
 	Width  uint32
 	Height uint32
 }
 
+// NewSSHSession create new SSH connection based on existing socket connection
 func NewSSHSession(nConn net.Conn, sshConfig *ssh.ServerConfig, localConfig Config) (*SSHSession, error) {
 	conn, chans, reqs, err := ssh.NewServerConn(nConn, sshConfig)
 	if err != nil {
@@ -55,7 +56,7 @@ func NewSSHSession(nConn net.Conn, sshConfig *ssh.ServerConfig, localConfig Conf
 		defer nConn.Close()
 		for range activity {
 			// When receive from activity channel, reset deadline
-			nConn.SetReadDeadline(time.Now().Add(localConfig.Timeout))
+			nConn.SetReadDeadline(time.Now().Add(localConfig.SvrTimeout))
 		}
 	}(activity)
 
@@ -89,7 +90,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 		case "pty-req":
 			// Of coz we are not going to create a PTY here as we are honeypot.
 			// We are creating a pseudo-PTY
-			var ptyreq PtyRequest
+			var ptyreq ptyRequest
 			if err := ssh.Unmarshal(req.Payload, &ptyreq); err != nil {
 				req.Reply(false, nil)
 			}
@@ -97,7 +98,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 			s.ptyReq = &ptyreq
 			req.Reply(true, nil)
 		case "env":
-			var envReq EnvRequest
+			var envReq envRequest
 			if err := ssh.Unmarshal(req.Payload, &envReq); err != nil {
 				req.Reply(false, nil)
 			} else {
@@ -107,7 +108,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 		case "shell":
 			log.Printf("User [%v] requesting shell access", s.user)
 			if s.ptyReq == nil {
-				s.ptyReq = &PtyRequest{
+				s.ptyReq = &ptyRequest{
 					Width:  80,
 					Height: 24,
 					Term:   "vt100",
@@ -125,7 +126,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 			if s.term == nil {
 				req.Reply(false, nil)
 			} else {
-				var winChg *WinChgRequest
+				var winChg *winChgRequest
 				if err := ssh.Unmarshal(req.Payload, winChg); err != nil {
 					req.Reply(false, nil)
 				}
@@ -170,7 +171,8 @@ func (s *SSHSession) handleNewConn() {
 
 // NewShell creates new shell
 func (s *SSHSession) NewShell(channel ssh.Channel) {
-	tLog := termlogger.NewACastLogger(int(s.ptyReq.Width), int(s.ptyReq.Height), s.ptyReq.Term, "honey", channel)
+	tLog := termlogger.NewACastLogger(int(s.ptyReq.Width), int(s.ptyReq.Height),
+		s.ptyReq.Term, "", "honey", channel)
 	s.term = terminal.NewTerminal(tLog, "$ ")
 	defer channel.Close()
 

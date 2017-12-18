@@ -10,44 +10,51 @@ import (
 	"time"
 
 	"github.com/imdario/mergo"
+
 	"golang.org/x/crypto/ssh"
 )
 
-// Config is the struct to store cofiguations
+// Config type is a map for storing config values
 type Config struct {
-	AllowRandomUser bool
-	Addr            string
-	Port            int
-	ServerIdent     string
-	MaxTries        int
-	UserList        map[string]string
-	Logfile         string
-	MaxConn         int
-	Timeout         time.Duration
+	SvrAddr                  string            `json:"server.addr"`
+	SvrPort                  int               `json:"server.port"`
+	SvrAllowRndUser          bool              `json:"server.allowRandomUser"`
+	SvrVer                   string            `json:"server.ident"`
+	SvrMaxTries              int               `json:"server.maxTries"`
+	SvrMaxConn               int               `json:"server.maxConnections"`
+	SvrUserList              map[string]string `json:"server.userList"`
+	SvrLogFilename           string            `json:"server.logFilename"`
+	SvrTimeout               time.Duration     `json:"server.Timeout"`
+	AcinemaLogPrefix         string            `json:"asciinema.logfileprefix"`
+	AcinemaUploadAfterFinish bool              `json:"asciinema.uploadAfterFinish"`
+	AcinemaAPIEndPt          string            `json:"asciinema.apiEndpoint"`
+	AcinemaAPIKey            string            `json:"asciinema.apiKey"`
 }
 
 func main() {
 
-	config := Config{
-		Addr:            "0.0.0.0",
-		Port:            22,
-		AllowRandomUser: true,
-		ServerIdent:     "SSH-2.0-Beague_1.0.0",
-		MaxTries:        3,
-		MaxConn:         20,
-		UserList:        make(map[string]string),
-		Logfile:         "test.log",
-		Timeout:         time.Duration(time.Minute * 10),
+	defaultCfg := Config{
+		SvrAddr:         "0.0.0.0",
+		SvrPort:         22,
+		SvrAllowRndUser: true,
+		SvrVer:          "SSH-2.0-Beague_1.0.0",
+		SvrMaxTries:     3,
+		SvrMaxConn:      20,
+		SvrUserList: map[string]string{
+			"testuser": "tiger",
+		},
+		SvrLogFilename:           "test.log",
+		SvrTimeout:               time.Duration(time.Minute * 10),
+		AcinemaLogPrefix:         "test",
+		AcinemaUploadAfterFinish: true,
+		AcinemaAPIEndPt:          "https://asciinema.org",
 	}
-	config.UserList["testuser"] = "tiger"
 
 	// Read config
-	if _, err := os.Stat("config.json"); !os.IsNotExist(err) {
-		configFile := loadConfiguration("config.json")
-		if err = mergo.Merge(&config, configFile); err != nil {
-			log.Fatalf("Cannot load configuration file!")
-		}
-	}
+	config := loadConfiguration("config.json")
+	mergo.Merge(&config, defaultCfg)
+
+	// Read banner
 	bannerFile, err := ioutil.ReadFile("banner.txt")
 	if err != nil {
 		bannerFile = []byte{}
@@ -61,7 +68,7 @@ func main() {
 			// Should use constant-time compare (or better, salt+hash) in
 			// a production setting.
 			log.Printf("User [%v] trying to login with password \"%v\"", c.User(), string(pass))
-			if stpass, exists := config.UserList[c.User()]; exists && (stpass == string(pass) || stpass == "*") || config.AllowRandomUser {
+			if stpass, exists := config.SvrUserList[c.User()]; exists && (stpass == string(pass) || stpass == "*") || config.SvrAllowRndUser {
 				return &ssh.Permissions{
 					Extensions: map[string]string{
 						"permit-agent-forwarding": "no",
@@ -71,7 +78,7 @@ func main() {
 			return nil, fmt.Errorf("password rejected for %q", c.User())
 		},
 
-		ServerVersion: config.ServerIdent,
+		ServerVersion: config.SvrVer,
 
 		BannerCallback: func(c ssh.ConnMetadata) string {
 			return string(bannerFile)
@@ -93,7 +100,7 @@ func main() {
 	// Once a ServerConfig has been configured, connections can be
 	// accepted.
 
-	listener, err := net.Listen("tcp", fmt.Sprintf("%v:%v", config.Addr, config.Port))
+	listener, err := net.Listen("tcp", fmt.Sprintf("%v:%v", config.SvrAddr, config.SvrPort))
 	defer listener.Close()
 	if err != nil {
 		log.Fatal("failed to listen for connection: ", err)
@@ -116,18 +123,17 @@ func main() {
 
 }
 
-/* func (term *terminal.Terminal) WriteString(s string) (int, error) {
-	return term.Write([]byte(s))
-} */
-
-func loadConfiguration(file string) Config {
-	var config Config
+func loadConfiguration(file string) (config Config) {
+	if _, err := os.Stat("config.json"); !os.IsNotExist(err) {
+		return
+	}
 	configFile, err := os.Open(file)
 	defer configFile.Close()
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Println(err.Error())
 	}
+
 	jsonParser := json.NewDecoder(configFile)
 	jsonParser.Decode(&config)
-	return config
+	return
 }

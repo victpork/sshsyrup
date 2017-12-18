@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"strings"
 	"time"
 )
 
@@ -36,7 +35,7 @@ type ASCIICastLog struct {
 }
 
 // NewACastLogger creates a new ASCIICast logger
-func NewACastLogger(width, height int, command, prefix string, input io.ReadWriter) (aLog *ASCIICastLog) {
+func NewACastLogger(width, height int, command, title, prefix string, input io.ReadWriter) (aLog *ASCIICastLog) {
 	now := time.Now()
 	aLog = new(ASCIICastLog)
 	header := asciiCast{
@@ -45,14 +44,14 @@ func NewACastLogger(width, height int, command, prefix string, input io.ReadWrit
 		Height:    height,
 		Command:   command,
 		Timestamp: now.Unix(),
-		Title:     "",
+		Title:     title,
 		Env: map[string]string{
 			"TERM":  "vt100",
 			"SHELL": "/bin/sh",
 		},
 	}
 	aLog.data, aLog.readWriter, aLog.createTime = header, input, now
-	aLog.fileName = prefix + aLog.createTime.Format("20060102-150405") + ".cast"
+	aLog.fileName = "logs/" + prefix + aLog.createTime.Format("20060102-150405") + ".cast"
 	b, err := json.Marshal(aLog.data)
 	if err != nil {
 		log.Printf("Error when marshalling log data, quitting")
@@ -64,24 +63,25 @@ func NewACastLogger(width, height int, command, prefix string, input io.ReadWrit
 		return
 	}
 	aLog.stdout = make(chan []byte, 100)
-	escUnprintable := func(r rune) rune {
 
-	}
 	go func(c <-chan []byte) {
 		for p := range c {
 			now := time.Now()
 			diff := now.Sub(aLog.createTime)
-
 			file, err := os.OpenFile(aLog.fileName, os.O_APPEND|os.O_WRONLY, 0666)
-			defer file.Close()
 			if err != nil {
-				panic("Cannot create log file")
+				log.Println("Log write error")
 			}
-			file.Write([]byte(fmt.Sprintf("[%f, %v, %v]\r\n", diff.Seconds(), "o", strings.Map(escUnprintable, string(p)))))
+			if escStr, err := json.Marshal(string(p)); err == nil {
+				file.Write([]byte(fmt.Sprintf("[%f, \"%v\", %v]\r\n", diff.Seconds(), "o", string(escStr))))
+			} else {
+				log.Println("Log write error")
+			}
+			file.Close()
 		}
-		//Upload cast to asciinema.org
+		// TODO: Upload cast to asciinema.org
 
-	}()
+	}(aLog.stdout)
 	return
 }
 
