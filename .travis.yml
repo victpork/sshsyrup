@@ -1,0 +1,16 @@
+language: go
+sudo: false
+
+go:
+  - 1.8.x
+  - 1.9.x
+
+before_install:
+  - go get -v github.com/imdario/mergo
+  - go get -v github.com/mkishere/binutils
+
+install:
+  - go get -d -v ./...
+
+script:
+  - go test -v ./...
