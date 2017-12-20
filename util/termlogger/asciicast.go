@@ -1,11 +1,14 @@
 package termlogger
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
+	"mime/multipart"
+	"net/http"
 	"os"
 	"time"
 )
@@ -26,20 +29,25 @@ type asciiCast struct {
 	Env       map[string]string `json:"env"`
 }
 
+// ASCIICastLog is the logger object for storing logging settings
 type ASCIICastLog struct {
-	data       asciiCast
-	fileName   string
-	createTime time.Time
-	readWriter io.ReadWriter
-	stdout     chan []byte
+	data        asciiCast
+	fileName    string
+	createTime  time.Time
+	readWriter  io.ReadWriter
+	stdout      chan []byte
+	userName    string
+	apikey      string
+	apiEndpoint string
+	elapse      time.Duration
+	htClient    *http.Client
 }
 
 // NewACastLogger creates a new ASCIICast logger
-func NewACastLogger(width, height int, command, title, prefix string, input io.ReadWriter) (aLog *ASCIICastLog) {
+func NewACastLogger(width, height int, command, title, prefix, apiEndPt, apiKey string, input io.ReadWriter) (aLog *ASCIICastLog) {
 	now := time.Now()
-	aLog = new(ASCIICastLog)
 	header := asciiCast{
-		Version:   1,
+		Version:   2,
 		Width:     width,
 		Height:    height,
 		Command:   command,
@@ -50,8 +58,20 @@ func NewACastLogger(width, height int, command, title, prefix string, input io.R
 			"SHELL": "/bin/sh",
 		},
 	}
-	aLog.data, aLog.readWriter, aLog.createTime = header, input, now
+	aLog = &ASCIICastLog{
+		data:        header,
+		readWriter:  input,
+		createTime:  now,
+		apikey:      apiKey,
+		apiEndpoint: apiEndPt,
+		userName:    "syrupSSH",
+	}
 	aLog.fileName = "logs/" + prefix + aLog.createTime.Format("20060102-150405") + ".cast"
+	if len(aLog.apikey) > 0 {
+		aLog.htClient = &http.Client{
+			Timeout: time.Second * 10,
+		}
+	}
 	b, err := json.Marshal(aLog.data)
 	if err != nil {
 		log.Printf("Error when marshalling log data, quitting")
@@ -79,8 +99,15 @@ func NewACastLogger(width, height int, command, title, prefix string, input io.R
 			}
 			file.Close()
 		}
-		// TODO: Upload cast to asciinema.org
+		// Upload cast to asciinema.org
+		if len(aLog.apikey) > 0 && aLog.elapse > time.Second*5 {
+			if url, err := aLog.Upload(); err != nil {
+				log.Printf("Log failed to upload: %v", err)
+			} else {
+				log.Printf("Log uploaded to URL %v", url)
+			}
 
+		}
 	}(aLog.stdout)
 	return
 }
@@ -94,7 +121,31 @@ func (aLog *ASCIICastLog) Write(p []byte) (n int, err error) {
 	return aLog.readWriter.Write(p)
 }
 
+// Upload the written file to asciinema server
+func (aLog *ASCIICastLog) Upload() (string, error) {
+	file, err := os.Open(aLog.fileName)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	buf := &bytes.Buffer{}
+	writer := multipart.NewWriter(buf)
+	filePart, err := writer.CreateFormFile("asciicast", "ascii.cast")
+	_, err = io.Copy(filePart, file)
+	writer.Close()
+	req, _ := http.NewRequest("POST", aLog.apiEndpoint+"/api/asciicasts", buf)
+	req.SetBasicAuth(aLog.userName, aLog.apikey)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Add("User-Agent", "SyrupSSH/1.0.0")
+	rsp, err := aLog.htClient.Do(req)
+	body := &bytes.Buffer{}
+	_, err = body.ReadFrom(rsp.Body)
+	rsp.Body.Close()
+	return string(body.Bytes()), err
+}
+
+// Close the STDOut keystroke channel for logging
 func (aLog *ASCIICastLog) Close() {
 	close(aLog.stdout)
-	return
+	aLog.elapse = time.Since(aLog.createTime)
 }

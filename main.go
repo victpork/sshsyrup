@@ -16,19 +16,18 @@ import (
 
 // Config type is a map for storing config values
 type Config struct {
-	SvrAddr                  string            `json:"server.addr"`
-	SvrPort                  int               `json:"server.port"`
-	SvrAllowRndUser          bool              `json:"server.allowRandomUser"`
-	SvrVer                   string            `json:"server.ident"`
-	SvrMaxTries              int               `json:"server.maxTries"`
-	SvrMaxConn               int               `json:"server.maxConnections"`
-	SvrUserList              map[string]string `json:"server.userList"`
-	SvrLogFilename           string            `json:"server.logFilename"`
-	SvrTimeout               time.Duration     `json:"server.Timeout"`
-	AcinemaLogPrefix         string            `json:"asciinema.logfileprefix"`
-	AcinemaUploadAfterFinish bool              `json:"asciinema.uploadAfterFinish"`
-	AcinemaAPIEndPt          string            `json:"asciinema.apiEndpoint"`
-	AcinemaAPIKey            string            `json:"asciinema.apiKey"`
+	SvrAddr          string            `json:"server.addr"`
+	SvrPort          int               `json:"server.port"`
+	SvrAllowRndUser  bool              `json:"server.allowRandomUser"`
+	SvrVer           string            `json:"server.ident"`
+	SvrMaxTries      int               `json:"server.maxTries"`
+	SvrMaxConn       int               `json:"server.maxConnections"`
+	SvrUserList      map[string]string `json:"server.userList"`
+	SvrLogFilename   string            `json:"server.logFilename"`
+	SvrTimeout       time.Duration     `json:"server.Timeout"`
+	AcinemaLogPrefix string            `json:"asciinema.logfileprefix"`
+	AcinemaAPIEndPt  string            `json:"asciinema.apiEndpoint"`
+	AcinemaAPIKey    string            `json:"asciinema.apiKey"`
 }
 
 func main() {
@@ -37,17 +36,16 @@ func main() {
 		SvrAddr:         "0.0.0.0",
 		SvrPort:         22,
 		SvrAllowRndUser: true,
-		SvrVer:          "SSH-2.0-Beague_1.0.0",
+		SvrVer:          "SSH-2.0-OpenSSH_6.8p1",
 		SvrMaxTries:     3,
 		SvrMaxConn:      20,
 		SvrUserList: map[string]string{
 			"testuser": "tiger",
 		},
-		SvrLogFilename:           "test.log",
-		SvrTimeout:               time.Duration(time.Minute * 10),
-		AcinemaLogPrefix:         "test",
-		AcinemaUploadAfterFinish: true,
-		AcinemaAPIEndPt:          "https://asciinema.org",
+		SvrLogFilename:   "test.log",
+		SvrTimeout:       time.Duration(time.Minute * 10),
+		AcinemaLogPrefix: "test",
+		AcinemaAPIEndPt:  "https://asciinema.org",
 	}
 
 	// Read config
@@ -123,10 +121,8 @@ func main() {
 
 }
 
-func loadConfiguration(file string) (config Config) {
-	if _, err := os.Stat("config.json"); !os.IsNotExist(err) {
-		return
-	}
+func loadConfiguration(file string) Config {
+	var config Config
 	configFile, err := os.Open(file)
 	defer configFile.Close()
 	if err != nil {
@@ -135,5 +131,5 @@ func loadConfiguration(file string) (config Config) {
 
 	jsonParser := json.NewDecoder(configFile)
 	jsonParser.Decode(&config)
-	return
+	return config
 }
