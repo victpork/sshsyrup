@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type frame struct {
@@ -43,6 +44,10 @@ type ASCIICastLog struct {
 	htClient    *http.Client
 }
 
+const (
+	logTimeFormat string = "20060102-150405"
+)
+
 // NewACastLogger creates a new ASCIICast logger
 func NewACastLogger(width, height int, command, title, prefix, apiEndPt, apiKey string, input io.ReadWriter) (aLog *ASCIICastLog) {
 	now := time.Now()
@@ -66,7 +71,7 @@ func NewACastLogger(width, height int, command, title, prefix, apiEndPt, apiKey 
 		apiEndpoint: apiEndPt,
 		userName:    "syrupSSH",
 	}
-	aLog.fileName = "logs/" + prefix + aLog.createTime.Format("20060102-150405") + ".cast"
+	aLog.fileName = "logs/sessions" + prefix + aLog.createTime.Format(logTimeFormat) + ".cast"
 	if len(aLog.apikey) > 0 {
 		aLog.htClient = &http.Client{
 			Timeout: time.Second * 10,
@@ -74,12 +79,12 @@ func NewACastLogger(width, height int, command, title, prefix, apiEndPt, apiKey 
 	}
 	b, err := json.Marshal(aLog.data)
 	if err != nil {
-		log.Printf("Error when marshalling log data, quitting")
+		log.WithField("data", aLog.data).WithError(err).Errorf("Error when marshalling log data")
 		return
 	}
 	b = append(b, '\r', '\n')
 	if err = ioutil.WriteFile(aLog.fileName, b, 0600); err != nil {
-		log.Printf("Error when writing log file %v, quitting", aLog.fileName)
+		log.WithField("path", aLog.fileName).WithError(err).Errorf("Error when writing log file")
 		return
 	}
 	aLog.stdout = make(chan []byte, 100)
@@ -90,21 +95,21 @@ func NewACastLogger(width, height int, command, title, prefix, apiEndPt, apiKey 
 			diff := now.Sub(aLog.createTime)
 			file, err := os.OpenFile(aLog.fileName, os.O_APPEND|os.O_WRONLY, 0666)
 			if err != nil {
-				log.Println("Log write error")
+				log.WithField("path", aLog.fileName).WithError(err).Error("Log write error")
 			}
 			if escStr, err := json.Marshal(string(p)); err == nil {
 				file.Write([]byte(fmt.Sprintf("[%f, \"%v\", %v]\r\n", diff.Seconds(), "o", string(escStr))))
 			} else {
-				log.Println("Log write error")
+				log.WithField("path", aLog.fileName).WithError(err).Error("Log write error")
 			}
 			file.Close()
 		}
 		// Upload cast to asciinema.org
 		if len(aLog.apikey) > 0 && aLog.elapse > time.Second*5 {
 			if url, err := aLog.Upload(); err != nil {
-				log.Printf("Log failed to upload: %v", err)
+				log.WithError(err).Error("Log failed to upload")
 			} else {
-				log.Printf("Log uploaded to URL %v", url)
+				log.WithField("url", url).Info("Log uploaded to URL")
 			}
 
 		}

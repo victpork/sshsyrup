@@ -26,6 +26,9 @@ go build -ldflags "-s -w"
 }
 ```
 * Generate SSH private key and renamed as id_rsa and put it in the same directory
+```
+ssh-keygen -t rsa
+```
 * Start the server
 ```
     sshsyrup

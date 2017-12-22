@@ -4,13 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net"
 	"os"
 	"time"
 
 	"github.com/imdario/mergo"
-
+	colorable "github.com/mattn/go-colorable"
+	"github.com/rifflock/lfshook"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -28,6 +29,23 @@ type Config struct {
 	AcinemaLogPrefix string            `json:"asciinema.logfileprefix"`
 	AcinemaAPIEndPt  string            `json:"asciinema.apiEndpoint"`
 	AcinemaAPIKey    string            `json:"asciinema.apiKey"`
+}
+
+const (
+	logTimeFormat string = "20060102"
+)
+
+func init() {
+	log.SetFormatter(&log.TextFormatter{ForceColors: true})
+	log.SetOutput(colorable.NewColorableStdout())
+	pathMap := lfshook.PathMap{
+		log.InfoLevel: fmt.Sprintf("logs/%v.log", time.Now().Format(logTimeFormat)),
+	}
+
+	log.AddHook(lfshook.NewHook(
+		pathMap,
+		&log.JSONFormatter{},
+	))
 }
 
 func main() {
@@ -58,14 +76,13 @@ func main() {
 		bannerFile = []byte{}
 	}
 
-	// An SSH server is represented by a ServerConfig, which holds
-	// certificate details and handles authentication of ServerConns.
 	sshConfig := &ssh.ServerConfig{
 
 		PasswordCallback: func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
-			// Should use constant-time compare (or better, salt+hash) in
-			// a production setting.
-			log.Printf("User [%v] trying to login with password \"%v\"", c.User(), string(pass))
+			log.WithFields(log.Fields{
+				"user":  c.User(),
+				"srcIP": c.RemoteAddr().String(),
+			}).Infof(`User trying to login with password "%v"`, string(pass))
 			if stpass, exists := config.SvrUserList[c.User()]; exists && (stpass == string(pass) || stpass == "*") || config.SvrAllowRndUser {
 				return &ssh.Permissions{
 					Extensions: map[string]string{
@@ -85,12 +102,12 @@ func main() {
 
 	privateBytes, err := ioutil.ReadFile("id_rsa")
 	if err != nil {
-		log.Fatal("Failed to load private key: ", err)
+		log.WithError(err).Fatal("Failed to load private key")
 	}
 
 	private, err := ssh.ParsePrivateKey(privateBytes)
 	if err != nil {
-		log.Fatal("Failed to parse private key: ", err)
+		log.WithError(err).Fatal("Failed to parse private key")
 	}
 
 	sshConfig.AddHostKey(private)
@@ -101,20 +118,21 @@ func main() {
 	listener, err := net.Listen("tcp", fmt.Sprintf("%v:%v", config.SvrAddr, config.SvrPort))
 	defer listener.Close()
 	if err != nil {
-		log.Fatal("failed to listen for connection: ", err)
+		log.WithError(err).Error("Could not create listening socket")
 	}
 
 	for {
 		nConn, err := listener.Accept()
 		defer nConn.Close()
+		log.WithField("srcIP", nConn.RemoteAddr()).Info("Connection established")
 		if err != nil {
-			log.Printf("failed to accept incoming connection: %v", err)
+			log.WithError(err).Error("Failed to accept incoming connection")
 			continue
 		}
 
 		sshSession, err := NewSSHSession(nConn, sshConfig, config)
 		if err != nil {
-			log.Printf("Error establising SSH connection")
+			log.WithError(err).Error("Error establising SSH connection")
 		}
 		go sshSession.handleNewConn()
 	}
@@ -126,10 +144,13 @@ func loadConfiguration(file string) Config {
 	configFile, err := os.Open(file)
 	defer configFile.Close()
 	if err != nil {
-		log.Println(err.Error())
+		log.WithError(err).Errorf("Cannot open configuration file %v", file)
 	}
 
 	jsonParser := json.NewDecoder(configFile)
-	jsonParser.Decode(&config)
+	err = jsonParser.Decode(&config)
+	if err != nil {
+		log.WithError(err).Errorf("Failed to parse configuration file %v", file)
+	}
 	return config
 }

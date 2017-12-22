@@ -2,6 +2,7 @@ package termlogger
 
 import (
 	"encoding/binary"
+	"io"
 	"os"
 	"time"
 )
@@ -18,8 +19,10 @@ type umlLogHeader struct {
 
 // UmlLog is the instance for storing logging information, like io
 type UmlLog struct {
-	tty  uint32
-	name string
+	tty        uint32
+	name       string
+	readWriter io.ReadWriter
+	stdout     chan []byte
 }
 
 // TTYDirection specifies the direction of data
@@ -38,15 +41,29 @@ const (
 	TTYWrite TTYDirection = 2
 )
 
+func (uLog *UmlLog) Read(p []byte) (n int, err error) {
+	return uLog.readWriter.Read(p)
+}
+
+func (uLog *UmlLog) Write(p []byte) (n int, err error) {
+	uLog.stdout <- p
+	return uLog.readWriter.Write(p)
+}
+
 // NewUMLLogger creates a new logger instance and will create the UML log file
-func NewUMLLogger(ttyID uint32, logFile string) (t UmlLog) {
+func NewUMLLogger(ttyID uint32, logFile string, readWriter io.ReadWriter) (t UmlLog) {
 	file, err := os.OpenFile(logFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
 	defer file.Close()
 	if err != nil {
 		panic("Cannot create log file")
 	}
 
-	t = UmlLog{tty: ttyID, name: logFile}
+	t = UmlLog{
+		tty:        ttyID,
+		name:       logFile,
+		readWriter: readWriter,
+		stdout:     make(chan []byte, 100),
+	}
 	now := time.Now()
 	header := umlLogHeader{
 		op:   ttyLogOpen,
@@ -60,31 +77,32 @@ func NewUMLLogger(ttyID uint32, logFile string) (t UmlLog) {
 	if err != nil {
 		panic("Could not write to log file")
 	}
-	return
-}
 
-func (t UmlLog) Write(data []byte, direction TTYDirection) (err error) {
-	file, err := os.OpenFile(t.name, os.O_APPEND|os.O_WRONLY, 0666)
-	defer file.Close()
-	if err != nil {
-		panic("Cannot create log file")
-	}
-	size := len(data)
-	now := time.Now()
+	go func(c chan []byte) {
+		for data := range c {
+			file, err := os.OpenFile(t.name, os.O_APPEND|os.O_WRONLY, 0666)
 
-	header := umlLogHeader{
-		op:   ttyLogWrite,
-		tty:  t.tty,
-		len:  int32(size),
-		dir:  direction,
-		sec:  uint32(now.Unix()),     //For compatibility, works till 2038
-		usec: uint32(now.UnixNano()), //For compatibility, works till 2038
-	}
-	err = binary.Write(file, binary.LittleEndian, header)
-	if err != nil {
-		return
-	}
-	_, err = file.Write(data)
+			if err != nil {
+				panic("Cannot create log file")
+			}
+			size := len(data)
+			now := time.Now()
+
+			header := umlLogHeader{
+				op:   ttyLogWrite,
+				tty:  t.tty,
+				len:  int32(size),
+				dir:  TTYWrite,
+				sec:  uint32(now.Unix()),     //For compatibility, works till 2038
+				usec: uint32(now.UnixNano()), //For compatibility, works till 2038
+			}
+			err = binary.Write(file, binary.LittleEndian, header)
+			if err != nil {
+				return
+			}
+			_, err = file.Write(data)
+		}
+	}(t.stdout)
 	return
 }
 

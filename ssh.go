@@ -1,11 +1,13 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
-	"log"
 	"net"
 	"strings"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/mkishere/binutils"
 	"github.com/mkishere/sshsyrup/util/termlogger"
@@ -23,6 +25,7 @@ type SSHSession struct {
 	ptyReq        *ptyRequest
 	term          *terminal.Terminal
 	config        Config
+	log           *log.Entry
 }
 
 type envRequest struct {
@@ -50,7 +53,13 @@ func NewSSHSession(nConn net.Conn, sshConfig *ssh.ServerConfig, localConfig Conf
 		return nil, err
 	}
 
-	log.Printf("New SSH connection from %s (%s)", conn.RemoteAddr(), conn.ClientVersion())
+	logger := log.WithFields(log.Fields{
+		"user":      conn.User(),
+		"srcIP":     conn.RemoteAddr().String(),
+		"clientStr": string(conn.ClientVersion()),
+		"sessionId": base64.StdEncoding.EncodeToString(conn.SessionID()),
+	})
+	logger.Infof("New SSH connection with client")
 
 	activity := make(chan bool)
 	go func(activity chan bool) {
@@ -69,6 +78,7 @@ func NewSSHSession(nConn net.Conn, sshConfig *ssh.ServerConfig, localConfig Conf
 		activity:      activity,
 		sshChan:       chans,
 		config:        localConfig,
+		log:           logger,
 	}, nil
 }
 
@@ -76,22 +86,17 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 
 	channel, requests, err := newChan.Accept()
 	if err != nil {
-		log.Printf("Could not accept channel: %v", err)
+		s.log.WithError(err).Error("Could not accept channel")
 		return
 	}
 
-	/* defer func() {
-		channel.SendRequest("exit-status", false, []byte{0, 0, 0, 0})
-		channel.Close()
-	}() */
-
 	go func(in <-chan *ssh.Request) {
 		for req := range in {
-			log.Println("Request: " + req.Type)
+
+			s.log.Infof("Request: %v", req.Type)
 			switch req.Type {
 			case "winadj@putty.projects.tartarus.org", "simple@putty.projects.tartarus.org":
 				//Do nothing here
-				req.Reply(true, nil)
 			case "pty-req":
 				// Of coz we are not going to create a PTY here as we are honeypot.
 				// We are creating a pseudo-PTY
@@ -99,7 +104,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 				if err := ssh.Unmarshal(req.Payload, &ptyreq); err != nil {
 					req.Reply(false, nil)
 				}
-				log.Printf("User [%v] requesting pty(%v %vx%v)", s.user, ptyreq.Term, ptyreq.Width, ptyreq.Height)
+				s.log.Infof("User requesting pty(%v %vx%v)", ptyreq.Term, ptyreq.Width, ptyreq.Height)
 				s.ptyReq = &ptyreq
 				req.Reply(true, nil)
 			case "env":
@@ -107,11 +112,11 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 				if err := ssh.Unmarshal(req.Payload, &envReq); err != nil {
 					req.Reply(false, nil)
 				} else {
-					log.Printf("User [%v] sends envvar:%v=%v", s.user, envReq.Name, envReq.Value)
+					s.log.Infof("User sends envvar:%v=%v", envReq.Name, envReq.Value)
 					req.Reply(true, nil)
 				}
 			case "shell":
-				log.Printf("User [%v] requesting shell access", s.user)
+				s.log.Info("User requesting shell access")
 				if s.ptyReq == nil {
 					s.ptyReq = &ptyRequest{
 						Width:  80,
@@ -126,7 +131,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 			case "subsystem":
 				var subsys string
 				binutils.Unmarshal(req.Payload, &s)
-				log.Printf("User [%v] requested subsystem %v", s.user, subsys)
+				s.log.Infof("User requested subsystem %v", subsys)
 				req.Reply(true, nil)
 			case "window-change":
 				if s.term == nil {
@@ -140,7 +145,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 					req.Reply(true, nil)
 				}
 			default:
-				log.Printf("Unknown channel request type %v", req.Type)
+				s.log.Infof("Unknown channel request type %v", req.Type)
 			}
 		}
 	}(requests)
@@ -153,10 +158,10 @@ func (s *SSHSession) handleNewConn() {
 		// protocol intended. In the case of a shell, the type is
 		// "session" and ServerShell may be used to present a simple
 		// terminal interface.
-		log.Printf("User [%v] created new channel(%v)", s.user, newChannel.ChannelType())
+		s.log.Infof("User created new channel(%v)", newChannel.ChannelType())
 		if newChannel.ChannelType() != "session" {
 			newChannel.Reject(ssh.UnknownChannelType, "unknown channel type")
-			log.Printf("Unknown channel type %v", newChannel.ChannelType())
+			s.log.Infof("Unknown channel type %v", newChannel.ChannelType())
 			continue
 		} else {
 			go s.handleNewSession(newChannel)
@@ -169,21 +174,23 @@ func (s *SSHSession) NewShell(channel ssh.Channel) {
 	tLog := termlogger.NewACastLogger(int(s.ptyReq.Width), int(s.ptyReq.Height),
 		s.ptyReq.Term, "", "honey", s.config.AcinemaAPIEndPt, s.config.AcinemaAPIKey, channel)
 	s.term = terminal.NewTerminal(tLog, "$ ")
-
-	defer channel.Close()
 	defer tLog.Close()
+	defer func() {
+		channel.SendRequest("exit-status", false, []byte{0, 0, 0, 0})
+		channel.Close()
+	}()
 cmdLoop:
 	for {
 		cmd, err := s.term.ReadLine()
-		log.Printf("[%v] typed command %v", s.user, cmd)
+		s.log.Infof("User input command %v", cmd)
 		switch {
 		case err != nil:
-			log.Printf("Err:%v", err)
+			s.log.WithError(err).Error("Error when reading terminal")
 			break cmdLoop
 		case strings.TrimSpace(cmd) == "":
 			//Do nothing
 		case cmd == "logout", cmd == "quit":
-			log.Printf("User [%v] logged out", s.user)
+			s.log.Infof("User logged out")
 			return
 		case strings.HasPrefix(cmd, "ls"):
 
