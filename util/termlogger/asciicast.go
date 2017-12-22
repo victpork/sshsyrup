@@ -49,19 +49,21 @@ const (
 )
 
 // NewACastLogger creates a new ASCIICast logger
-func NewACastLogger(width, height int, command, title, prefix, apiEndPt, apiKey string, input io.ReadWriter) (aLog *ASCIICastLog) {
+func NewACastLogger(width, height int, apiEndPt, apiKey string, input io.ReadWriter, params map[string]string) (aLog *ASCIICastLog) {
 	now := time.Now()
 	header := asciiCast{
 		Version:   2,
 		Width:     width,
 		Height:    height,
-		Command:   command,
 		Timestamp: now.Unix(),
-		Title:     title,
+		Title:     fmt.Sprintf("%v@%v - %v", params["USER"], params["SRC"], now.Format(logTimeFormat)),
 		Env: map[string]string{
 			"TERM":  "vt100",
 			"SHELL": "/bin/sh",
 		},
+	}
+	for k, v := range params {
+		header.Env[k] = v
 	}
 	aLog = &ASCIICastLog{
 		data:        header,
@@ -71,7 +73,7 @@ func NewACastLogger(width, height int, command, title, prefix, apiEndPt, apiKey 
 		apiEndpoint: apiEndPt,
 		userName:    "syrupSSH",
 	}
-	aLog.fileName = "logs/sessions/" + prefix + aLog.createTime.Format(logTimeFormat) + ".cast"
+	aLog.fileName = fmt.Sprintf("logs/sessions/%v-%v.cast", params["USER"], aLog.createTime.Format(logTimeFormat))
 	if len(aLog.apikey) > 0 {
 		aLog.htClient = &http.Client{
 			Timeout: time.Second * 10,

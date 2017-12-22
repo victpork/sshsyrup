@@ -17,25 +17,43 @@ import (
 
 // Config type is a map for storing config values
 type Config struct {
-	SvrAddr          string            `json:"server.addr"`
-	SvrPort          int               `json:"server.port"`
-	SvrAllowRndUser  bool              `json:"server.allowRandomUser"`
-	SvrVer           string            `json:"server.ident"`
-	SvrMaxTries      int               `json:"server.maxTries"`
-	SvrMaxConn       int               `json:"server.maxConnections"`
-	SvrUserList      map[string]string `json:"server.userList"`
-	SvrLogFilename   string            `json:"server.logFilename"`
-	SvrTimeout       time.Duration     `json:"server.Timeout"`
-	AcinemaLogPrefix string            `json:"asciinema.logfileprefix"`
-	AcinemaAPIEndPt  string            `json:"asciinema.apiEndpoint"`
-	AcinemaAPIKey    string            `json:"asciinema.apiKey"`
+	SvrAddr         string            `json:"server.addr"`
+	SvrPort         int               `json:"server.port"`
+	SvrAllowRndUser bool              `json:"server.allowRandomUser"`
+	SvrVer          string            `json:"server.ident"`
+	SvrMaxTries     int               `json:"server.maxTries"`
+	SvrMaxConn      int               `json:"server.maxConnections"`
+	SvrUserList     map[string]string `json:"server.userList"`
+	SvrTimeout      time.Duration     `json:"server.Timeout"`
+	AcinemaAPIEndPt string            `json:"asciinema.apiEndpoint"`
+	AcinemaAPIKey   string            `json:"asciinema.apiKey"`
 }
 
 const (
 	logTimeFormat string = "20060102"
 )
 
+var (
+	config     = loadConfiguration("config.json")
+	defaultCfg = Config{
+		SvrAddr:         "0.0.0.0",
+		SvrPort:         22,
+		SvrAllowRndUser: true,
+		SvrVer:          "SSH-2.0-OpenSSH_6.8p1",
+		SvrMaxTries:     3,
+		SvrMaxConn:      20,
+		SvrUserList: map[string]string{
+			"testuser": "tiger",
+		},
+		SvrTimeout:      time.Duration(time.Minute * 10),
+		AcinemaAPIEndPt: "https://asciinema.org",
+	}
+)
+
 func init() {
+	// Merge
+	mergo.Merge(&config, defaultCfg)
+
 	log.SetFormatter(&log.TextFormatter{ForceColors: true})
 	log.SetOutput(colorable.NewColorableStdout())
 	pathMap := lfshook.PathMap{
@@ -49,33 +67,11 @@ func init() {
 }
 
 func main() {
-
-	defaultCfg := Config{
-		SvrAddr:         "0.0.0.0",
-		SvrPort:         22,
-		SvrAllowRndUser: true,
-		SvrVer:          "SSH-2.0-OpenSSH_6.8p1",
-		SvrMaxTries:     3,
-		SvrMaxConn:      20,
-		SvrUserList: map[string]string{
-			"testuser": "tiger",
-		},
-		SvrLogFilename:   "test.log",
-		SvrTimeout:       time.Duration(time.Minute * 10),
-		AcinemaLogPrefix: "test",
-		AcinemaAPIEndPt:  "https://asciinema.org",
-	}
-
-	// Read config
-	config := loadConfiguration("config.json")
-	mergo.Merge(&config, defaultCfg)
-
 	// Read banner
 	bannerFile, err := ioutil.ReadFile("banner.txt")
 	if err != nil {
 		bannerFile = []byte{}
 	}
-
 	sshConfig := &ssh.ServerConfig{
 
 		PasswordCallback: func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
@@ -130,9 +126,9 @@ func main() {
 			continue
 		}
 
-		sshSession, err := NewSSHSession(nConn, sshConfig, config)
+		sshSession, err := NewSSHSession(nConn, sshConfig)
 		if err != nil {
-			log.WithError(err).Error("Error establising SSH connection")
+			log.WithField("srcIP", nConn.RemoteAddr()).WithError(err).Error("Error establising SSH connection")
 		}
 		go sshSession.handleNewConn()
 	}
@@ -144,13 +140,13 @@ func loadConfiguration(file string) Config {
 	configFile, err := os.Open(file)
 	defer configFile.Close()
 	if err != nil {
-		log.WithError(err).Errorf("Cannot open configuration file %v", file)
+		log.WithField("file", file).WithError(err).Errorf("Cannot open configuration file")
 	}
 
 	jsonParser := json.NewDecoder(configFile)
 	err = jsonParser.Decode(&config)
 	if err != nil {
-		log.WithError(err).Errorf("Failed to parse configuration file %v", file)
+		log.WithField("file", file).WithError(err).Errorf("Failed to parse configuration file")
 	}
 	return config
 }

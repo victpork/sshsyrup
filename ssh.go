@@ -24,7 +24,6 @@ type SSHSession struct {
 	sshChan       <-chan ssh.NewChannel
 	ptyReq        *ptyRequest
 	term          *terminal.Terminal
-	config        Config
 	log           *log.Entry
 }
 
@@ -47,7 +46,7 @@ type winChgRequest struct {
 }
 
 // NewSSHSession create new SSH connection based on existing socket connection
-func NewSSHSession(nConn net.Conn, sshConfig *ssh.ServerConfig, localConfig Config) (*SSHSession, error) {
+func NewSSHSession(nConn net.Conn, sshConfig *ssh.ServerConfig) (*SSHSession, error) {
 	conn, chans, reqs, err := ssh.NewServerConn(nConn, sshConfig)
 	if err != nil {
 		return nil, err
@@ -66,7 +65,7 @@ func NewSSHSession(nConn net.Conn, sshConfig *ssh.ServerConfig, localConfig Conf
 		defer nConn.Close()
 		for range activity {
 			// When receive from activity channel, reset deadline
-			nConn.SetReadDeadline(time.Now().Add(localConfig.SvrTimeout))
+			nConn.SetReadDeadline(time.Now().Add(config.SvrTimeout))
 		}
 	}(activity)
 
@@ -77,7 +76,6 @@ func NewSSHSession(nConn net.Conn, sshConfig *ssh.ServerConfig, localConfig Conf
 		clientVersion: string(conn.ClientVersion()),
 		activity:      activity,
 		sshChan:       chans,
-		config:        localConfig,
 		log:           logger,
 	}, nil
 }
@@ -171,8 +169,14 @@ func (s *SSHSession) handleNewConn() {
 
 // NewShell creates new shell
 func (s *SSHSession) NewShell(channel ssh.Channel) {
+	asciiLogParams := map[string]string{
+		"TERM": s.ptyReq.Term,
+		"USER": s.user,
+		"SRC":  s.src.String(),
+	}
+
 	tLog := termlogger.NewACastLogger(int(s.ptyReq.Width), int(s.ptyReq.Height),
-		s.ptyReq.Term, "", "honey", s.config.AcinemaAPIEndPt, s.config.AcinemaAPIKey, channel)
+		config.AcinemaAPIEndPt, config.AcinemaAPIKey, channel, asciiLogParams)
 	s.term = terminal.NewTerminal(tLog, "$ ")
 	defer tLog.Close()
 	defer func() {
