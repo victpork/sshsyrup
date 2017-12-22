@@ -71,7 +71,7 @@ func NewACastLogger(width, height int, command, title, prefix, apiEndPt, apiKey 
 		apiEndpoint: apiEndPt,
 		userName:    "syrupSSH",
 	}
-	aLog.fileName = "logs/sessions" + prefix + aLog.createTime.Format(logTimeFormat) + ".cast"
+	aLog.fileName = "logs/sessions/" + prefix + aLog.createTime.Format(logTimeFormat) + ".cast"
 	if len(aLog.apikey) > 0 {
 		aLog.htClient = &http.Client{
 			Timeout: time.Second * 10,
