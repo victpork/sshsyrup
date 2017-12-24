@@ -9,7 +9,6 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/mkishere/binutils"
 	"github.com/mkishere/sshsyrup/util/termlogger"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/terminal"
@@ -38,7 +37,7 @@ type ptyRequest struct {
 	Height  uint32
 	PWidth  uint32
 	PHeight uint32
-	Modes   []uint8
+	//Modes   []uint8
 }
 type winChgRequest struct {
 	Width  uint32
@@ -120,7 +119,6 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 						Width:  80,
 						Height: 24,
 						Term:   "vt100",
-						Modes:  []byte{},
 					}
 				}
 				// The need of a goroutine here is that PuTTY will wait for reply before acknowledge it enters shell mode
@@ -128,7 +126,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 				req.Reply(true, nil)
 			case "subsystem":
 				var subsys string
-				binutils.Unmarshal(req.Payload, &s)
+				ssh.Unmarshal(req.Payload, &s)
 				s.log.Infof("User requested subsystem %v", subsys)
 				req.Reply(true, nil)
 			case "window-change":
