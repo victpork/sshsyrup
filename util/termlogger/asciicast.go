@@ -37,6 +37,7 @@ type ASCIICastLog struct {
 	createTime  time.Time
 	readWriter  io.ReadWriter
 	stdout      chan []byte
+	stdin       chan []byte
 	userName    string
 	apikey      string
 	apiEndpoint string
@@ -66,7 +67,8 @@ func NewACastLogger(width, height int, apiEndPt, apiKey string, input io.ReadWri
 		header.Env[k] = v
 	}
 	aLog = &ASCIICastLog{
-		data:        header,
+		data: header,
+		//buf:         bufio.NewReadWriter(bufio.NewReader(input), bufio.NewWriter(input)),
 		readWriter:  input,
 		createTime:  now,
 		apikey:      apiKey,
@@ -89,22 +91,17 @@ func NewACastLogger(width, height int, apiEndPt, apiKey string, input io.ReadWri
 		log.WithField("path", aLog.fileName).WithError(err).Errorf("Error when writing log file")
 		return
 	}
-	aLog.stdout = make(chan []byte, 100)
+	aLog.stdout = make(chan []byte, 10)
+	aLog.stdin = make(chan []byte, 10)
 
-	go func(c <-chan []byte) {
-		for p := range c {
-			now := time.Now()
-			diff := now.Sub(aLog.createTime)
-			file, err := os.OpenFile(aLog.fileName, os.O_APPEND|os.O_WRONLY, 0666)
-			if err != nil {
-				log.WithField("path", aLog.fileName).WithError(err).Error("Log write error")
+	go func(in, out <-chan []byte) {
+		for {
+			select {
+			case p := <-in:
+				writeLog(aLog.fileName, "i", string(p), aLog.createTime)
+			case p := <-out:
+				writeLog(aLog.fileName, "o", string(p), aLog.createTime)
 			}
-			if escStr, err := json.Marshal(string(p)); err == nil {
-				file.Write([]byte(fmt.Sprintf("[%f, \"%v\", %v]\r\n", diff.Seconds(), "o", string(escStr))))
-			} else {
-				log.WithField("path", aLog.fileName).WithError(err).Error("Log write error")
-			}
-			file.Close()
 		}
 		// Upload cast to asciinema.org
 		if len(aLog.apikey) > 0 && aLog.elapse > time.Second*5 {
@@ -115,16 +112,42 @@ func NewACastLogger(width, height int, apiEndPt, apiKey string, input io.ReadWri
 			}
 
 		}
-	}(aLog.stdout)
+	}(aLog.stdin, aLog.stdout)
 	return
 }
 
-func (aLog *ASCIICastLog) Read(p []byte) (n int, err error) {
-	return aLog.readWriter.Read(p)
+func writeLog(fileName, direction, strSeq string, createTime time.Time) {
+	now := time.Now()
+	diff := now.Sub(createTime)
+	file, err := os.OpenFile(fileName, os.O_APPEND|os.O_WRONLY, 0666)
+	if err != nil {
+		log.WithField("path", fileName).WithError(err).Error("Log write error")
+		return
+	}
+	if escStr, err := json.Marshal(strSeq); err == nil {
+		file.Write([]byte(fmt.Sprintf("[%f, \"%v\", %v]\r\n", diff.Seconds(), direction, string(escStr))))
+	} else {
+		log.WithField("path", fileName).WithError(err).Errorf("Cannot parse error string: %v", strSeq)
+	}
+	file.Close()
 }
 
-func (aLog *ASCIICastLog) Write(p []byte) (n int, err error) {
-	aLog.stdout <- p
+func (aLog *ASCIICastLog) Read(p []byte) (n int, err error) {
+	n, err = aLog.readWriter.Read(p)
+	defer func(b []byte) {
+		if len(b) > 0 {
+			aLog.stdin <- b[:bytes.IndexByte(b, 0)]
+		}
+	}(p)
+	return
+}
+
+func (aLog *ASCIICastLog) Write(p []byte) (int, error) {
+	defer func(b []byte) {
+		if len(b) > 0 {
+			aLog.stdout <- b
+		}
+	}(p)
 	return aLog.readWriter.Write(p)
 }
 
