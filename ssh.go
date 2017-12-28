@@ -37,7 +37,7 @@ type ptyRequest struct {
 	Height  uint32
 	PWidth  uint32
 	PHeight uint32
-	//Modes   []uint8
+	Modes   string
 }
 type winChgRequest struct {
 	Width  uint32
@@ -99,11 +99,13 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 				// We are creating a pseudo-PTY
 				var ptyreq ptyRequest
 				if err := ssh.Unmarshal(req.Payload, &ptyreq); err != nil {
+					s.log.WithError(err).Errorln("Cannot parse user request payload")
 					req.Reply(false, nil)
+				} else {
+					s.log.Infof("User requesting pty(%v %vx%v)", ptyreq.Term, ptyreq.Width, ptyreq.Height)
+					s.ptyReq = &ptyreq
+					req.Reply(true, nil)
 				}
-				s.log.Infof("User requesting pty(%v %vx%v)", ptyreq.Term, ptyreq.Width, ptyreq.Height)
-				s.ptyReq = &ptyreq
-				req.Reply(true, nil)
 			case "env":
 				var envReq envRequest
 				if err := ssh.Unmarshal(req.Payload, &envReq); err != nil {
