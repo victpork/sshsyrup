@@ -76,9 +76,10 @@ func main() {
 
 		PasswordCallback: func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
 			log.WithFields(log.Fields{
-				"user":  c.User(),
-				"srcIP": c.RemoteAddr().String(),
-			}).Infof(`User trying to login with password "%v"`, string(pass))
+				"user":     c.User(),
+				"srcIP":    c.RemoteAddr().String(),
+				"password": string(pass),
+			}).Info("User trying to login with password")
 			if stpass, exists := config.SvrUserList[c.User()]; exists && (stpass == string(pass) || stpass == "*") || config.SvrAllowRndUser {
 				return &ssh.Permissions{
 					Extensions: map[string]string{
