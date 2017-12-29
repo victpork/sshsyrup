@@ -41,7 +41,7 @@ var (
 		SvrAllowRndUser: true,
 		SvrVer:          "SSH-2.0-OpenSSH_6.8p1",
 		SvrMaxTries:     3,
-		SvrMaxConn:      20,
+		SvrMaxConn:      10,
 		SvrUserList: map[string]string{
 			"testuser": "tiger",
 		},
@@ -109,8 +109,11 @@ func main() {
 
 	sshConfig.AddHostKey(private)
 
-	// Once a ServerConfig has been configured, connections can be
-	// accepted.
+	connChan := make(chan net.Conn)
+	// Create pool of workers to handle connections
+	for i := 0; i < config.SvrMaxConn; i++ {
+		go createSessionHandler(connChan, sshConfig)
+	}
 
 	listener, err := net.Listen("tcp", fmt.Sprintf("%v:%v", config.SvrAddr, config.SvrPort))
 	defer listener.Close()
@@ -120,18 +123,13 @@ func main() {
 
 	for {
 		nConn, err := listener.Accept()
-		defer nConn.Close()
+
 		log.WithField("srcIP", nConn.RemoteAddr()).Info("Connection established")
 		if err != nil {
 			log.WithError(err).Error("Failed to accept incoming connection")
 			continue
 		}
-
-		sshSession, err := NewSSHSession(nConn, sshConfig)
-		if err != nil {
-			log.WithField("srcIP", nConn.RemoteAddr()).WithError(err).Error("Error establising SSH connection")
-		}
-		go sshSession.handleNewConn()
+		connChan <- nConn
 	}
 
 }

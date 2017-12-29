@@ -40,6 +40,7 @@ server.addr | Server address the honeypot will listen to. Default _0.0.0.0_
 server.port | Port number the honeypot will listen to. Default _22_
 server.allowRandomUser | Allow user to login with any user names, default _false_
 server.ident | Server identification string. Default _SSH-2.0-OpenSSH_6.8p1_
+server.maxConnections | Max connections allowed simutaneously. Default to 20
 server.userList | Contains a Map that has user name as key and password as value. Use asterisk '*' as password will allow any password to login to that account
 asciinema.logfileprefix | Prefix to write asciinema compatible terminal replay files. Default to _test_
 asciinema.apiEndpoint | The service endpoint for the replay to upload. Default to _https://asciinema.org_

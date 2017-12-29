@@ -1,5 +1,5 @@
-id_rsa
+.vscode/**
+logs/**
 authorized_keys
 debug
-.vscode/**
-*.cast
+id_rsa

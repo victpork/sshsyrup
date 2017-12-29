@@ -189,7 +189,11 @@ cmdLoop:
 		s.log.Infof("User input command %v", cmd)
 		switch {
 		case err != nil:
-			s.log.WithError(err).Error("Error when reading terminal")
+			if err.Error() == "EOF" {
+				s.log.Info("EOF received from client")
+			} else {
+				s.log.WithError(err).Error("Error when reading terminal")
+			}
 			break cmdLoop
 		case strings.TrimSpace(cmd) == "":
 			//Do nothing
@@ -202,5 +206,16 @@ cmdLoop:
 			args := strings.SplitN(cmd, " ", 2)
 			s.term.Write([]byte(fmt.Sprintf("%v: command not found\n", args[0])))
 		}
+	}
+}
+
+func createSessionHandler(c <-chan net.Conn, sshConfig *ssh.ServerConfig) {
+	for conn := range c {
+		sshSession, err := NewSSHSession(conn, sshConfig)
+		if err != nil {
+			log.WithField("srcIP", conn.RemoteAddr()).WithError(err).Error("Error establising SSH connection")
+		}
+		sshSession.handleNewConn()
+		conn.Close()
 	}
 }
