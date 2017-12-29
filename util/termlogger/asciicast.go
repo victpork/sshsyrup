@@ -43,6 +43,7 @@ type ASCIICastLog struct {
 	apiEndpoint string
 	elapse      time.Duration
 	htClient    *http.Client
+	quit        chan struct{}
 }
 
 const (
@@ -67,8 +68,7 @@ func NewACastLogger(width, height int, apiEndPt, apiKey string, input io.ReadWri
 		header.Env[k] = v
 	}
 	aLog = &ASCIICastLog{
-		data: header,
-		//buf:         bufio.NewReadWriter(bufio.NewReader(input), bufio.NewWriter(input)),
+		data:        header,
 		readWriter:  input,
 		createTime:  now,
 		apikey:      apiKey,
@@ -93,14 +93,18 @@ func NewACastLogger(width, height int, apiEndPt, apiKey string, input io.ReadWri
 	}
 	aLog.stdout = make(chan []byte, 10)
 	aLog.stdin = make(chan []byte, 10)
+	aLog.quit = make(chan struct{})
 
-	go func(in, out <-chan []byte) {
+	go func(in, out <-chan []byte, quit <-chan struct{}) {
+	Logloop:
 		for {
 			select {
 			case p := <-in:
 				writeLog(aLog.fileName, "i", string(p), aLog.createTime)
 			case p := <-out:
 				writeLog(aLog.fileName, "o", string(p), aLog.createTime)
+			case <-quit:
+				break Logloop
 			}
 		}
 		// Upload cast to asciinema.org
@@ -112,7 +116,7 @@ func NewACastLogger(width, height int, apiEndPt, apiKey string, input io.ReadWri
 			}
 
 		}
-	}(aLog.stdin, aLog.stdout)
+	}(aLog.stdin, aLog.stdout, aLog.quit)
 	return
 }
 
@@ -176,6 +180,9 @@ func (aLog *ASCIICastLog) Upload() (string, error) {
 
 // Close the STDOut keystroke channel for logging
 func (aLog *ASCIICastLog) Close() {
+	log.Debug("ASCIICastLog.Close() called")
+	close(aLog.stdin)
 	close(aLog.stdout)
+	close(aLog.quit)
 	aLog.elapse = time.Since(aLog.createTime)
 }
