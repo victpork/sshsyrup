@@ -1,6 +1,11 @@
 package termlogger
 
+import (
+	"io"
+)
+
 // Logger interface for different format loggers
 type Logger interface {
-	Write(data []byte, direction TTYDirection) (err error)
+	io.ReadWriter
+	Close()
 }

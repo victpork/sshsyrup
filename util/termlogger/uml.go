@@ -51,14 +51,14 @@ func (uLog *UmlLog) Write(p []byte) (n int, err error) {
 }
 
 // NewUMLLogger creates a new logger instance and will create the UML log file
-func NewUMLLogger(ttyID uint32, logFile string, readWriter io.ReadWriter) (t UmlLog) {
+func NewUMLLogger(ttyID uint32, logFile string, readWriter io.ReadWriter) Logger {
 	file, err := os.OpenFile(logFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
 	defer file.Close()
 	if err != nil {
 		panic("Cannot create log file")
 	}
 
-	t = UmlLog{
+	t := &UmlLog{
 		tty:        ttyID,
 		name:       logFile,
 		readWriter: readWriter,
@@ -103,25 +103,22 @@ func NewUMLLogger(ttyID uint32, logFile string, readWriter io.ReadWriter) (t Uml
 			_, err = file.Write(data)
 		}
 	}(t.stdout)
-	return
+	return t
 }
 
 // Close closes the log file for writing UML logs
-func (t UmlLog) Close() (err error) {
+func (uLog UmlLog) Close() {
 	now := time.Now()
-	file, err := os.OpenFile(t.name, os.O_APPEND|os.O_WRONLY, 0666)
+	file, _ := os.OpenFile(uLog.name, os.O_APPEND|os.O_WRONLY, 0666)
 	defer file.Close()
 	header := umlLogHeader{
 		op:   ttyLogClose,
-		tty:  t.tty,
+		tty:  uLog.tty,
 		len:  0,
 		dir:  0,
 		sec:  uint32(now.Unix()),     //For compatibility, works till 2038
 		usec: uint32(now.UnixNano()), //For compatibility, works till 2038
 	}
-	err = binary.Write(file, binary.LittleEndian, header)
-	if err != nil {
-		return
-	}
-	return nil
+	binary.Write(file, binary.LittleEndian, header)
+	return
 }

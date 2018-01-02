@@ -51,7 +51,7 @@ const (
 )
 
 // NewACastLogger creates a new ASCIICast logger
-func NewACastLogger(width, height int, apiEndPt, apiKey string, input io.ReadWriter, params map[string]string) (aLog *ASCIICastLog) {
+func NewACastLogger(width, height int, apiEndPt, apiKey string, input io.ReadWriter, params map[string]string) Logger {
 	now := time.Now()
 	header := asciiCast{
 		Version:   2,
@@ -67,7 +67,7 @@ func NewACastLogger(width, height int, apiEndPt, apiKey string, input io.ReadWri
 	for k, v := range params {
 		header.Env[k] = v
 	}
-	aLog = &ASCIICastLog{
+	aLog := &ASCIICastLog{
 		data:        header,
 		readWriter:  input,
 		createTime:  now,
@@ -84,12 +84,12 @@ func NewACastLogger(width, height int, apiEndPt, apiKey string, input io.ReadWri
 	b, err := json.Marshal(aLog.data)
 	if err != nil {
 		log.WithField("data", aLog.data).WithError(err).Errorf("Error when marshalling log data")
-		return
+		return nil
 	}
 	b = append(b, '\r', '\n')
 	if err = ioutil.WriteFile(aLog.fileName, b, 0600); err != nil {
 		log.WithField("path", aLog.fileName).WithError(err).Errorf("Error when writing log file")
-		return
+		return nil
 	}
 	aLog.stdout = make(chan []byte, 10)
 	aLog.stdin = make(chan []byte, 10)
@@ -117,7 +117,7 @@ func NewACastLogger(width, height int, apiEndPt, apiKey string, input io.ReadWri
 
 		}
 	}(aLog.stdin, aLog.stdout, aLog.quit)
-	return
+	return aLog
 }
 
 func writeLog(fileName, direction, strSeq string, createTime time.Time) {
