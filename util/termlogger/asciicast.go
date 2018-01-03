@@ -91,8 +91,8 @@ func NewACastLogger(width, height int, apiEndPt, apiKey string, input io.ReadWri
 		log.WithField("path", aLog.fileName).WithError(err).Errorf("Error when writing log file")
 		return nil
 	}
-	aLog.stdout = make(chan []byte, 10)
-	aLog.stdin = make(chan []byte, 10)
+	aLog.stdout = make(chan []byte)
+	aLog.stdin = make(chan []byte)
 	aLog.quit = make(chan struct{})
 
 	go func(in, out <-chan []byte, quit <-chan struct{}) {
