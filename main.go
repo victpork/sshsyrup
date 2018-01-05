@@ -37,7 +37,7 @@ var (
 	config     = loadConfiguration("config.json")
 	defaultCfg = Config{
 		SvrAddr:         "0.0.0.0",
-		SvrPort:         22,
+		SvrPort:         2222,
 		SvrAllowRndUser: true,
 		SvrVer:          "SSH-2.0-OpenSSH_6.8p1",
 		SvrMaxTries:     3,
