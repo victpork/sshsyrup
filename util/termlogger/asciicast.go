@@ -15,9 +15,9 @@ import (
 )
 
 type frame struct {
-	Time  float64
+	Time  time.Time
 	Type  string
-	Input string
+	Input []byte
 }
 
 type asciiCast struct {
@@ -36,8 +36,7 @@ type ASCIICastLog struct {
 	fileName    string
 	createTime  time.Time
 	readWriter  io.ReadWriter
-	stdout      chan []byte
-	stdin       chan []byte
+	logChan     chan frame
 	userName    string
 	apikey      string
 	apiEndpoint string
@@ -48,6 +47,8 @@ type ASCIICastLog struct {
 
 const (
 	logTimeFormat string = "20060102-150405"
+	input                = "i"
+	output               = "o"
 )
 
 // NewACastLogger creates a new ASCIICast logger
@@ -91,18 +92,15 @@ func NewACastLogger(width, height int, apiEndPt, apiKey string, input io.ReadWri
 		log.WithField("path", aLog.fileName).WithError(err).Errorf("Error when writing log file")
 		return nil
 	}
-	aLog.stdout = make(chan []byte)
-	aLog.stdin = make(chan []byte)
+	aLog.logChan = make(chan frame, 10)
 	aLog.quit = make(chan struct{})
 
-	go func(in, out <-chan []byte, quit <-chan struct{}) {
+	go func(fChan <-chan frame, quit <-chan struct{}) {
 	Logloop:
 		for {
 			select {
-			case p := <-in:
-				writeLog(aLog.fileName, "i", string(p), aLog.createTime)
-			case p := <-out:
-				writeLog(aLog.fileName, "o", string(p), aLog.createTime)
+			case f := <-fChan:
+				aLog.writeLog(f)
 			case <-quit:
 				break Logloop
 			}
@@ -116,22 +114,21 @@ func NewACastLogger(width, height int, apiEndPt, apiKey string, input io.ReadWri
 			}
 
 		}
-	}(aLog.stdin, aLog.stdout, aLog.quit)
+	}(aLog.logChan, aLog.quit)
 	return aLog
 }
 
-func writeLog(fileName, direction, strSeq string, createTime time.Time) {
-	now := time.Now()
-	diff := now.Sub(createTime)
-	file, err := os.OpenFile(fileName, os.O_APPEND|os.O_WRONLY, 0666)
+func (aLog *ASCIICastLog) writeLog(f frame) {
+	diff := f.Time.Sub(aLog.createTime)
+	file, err := os.OpenFile(aLog.fileName, os.O_APPEND|os.O_WRONLY, 0666)
 	if err != nil {
-		log.WithField("path", fileName).WithError(err).Error("Log write error")
+		log.WithField("path", aLog.fileName).WithError(err).Error("Log write error")
 		return
 	}
-	if escStr, err := json.Marshal(strSeq); err == nil {
-		file.Write([]byte(fmt.Sprintf("[%f, \"%v\", %v]\r\n", diff.Seconds(), direction, string(escStr))))
+	if escStr, err := json.Marshal(string(f.Input)); err == nil {
+		file.Write([]byte(fmt.Sprintf("[%f, \"%v\", %v]\r\n", diff.Seconds(), f.Type, string(escStr))))
 	} else {
-		log.WithField("path", fileName).WithError(err).Errorf("Cannot parse error string: %v", strSeq)
+		log.WithField("path", aLog.fileName).WithError(err).Errorf("Cannot parse error string: %v", string(f.Input))
 	}
 	file.Close()
 }
@@ -140,7 +137,11 @@ func (aLog *ASCIICastLog) Read(p []byte) (n int, err error) {
 	n, err = aLog.readWriter.Read(p)
 	defer func(b []byte) {
 		if len(b) > 0 {
-			aLog.stdin <- b[:bytes.IndexByte(b, 0)]
+			aLog.logChan <- frame{
+				Type: input,
+
+				Input: b[:bytes.IndexByte(b, 0)],
+			}
 		}
 	}(p)
 	return
@@ -149,7 +150,10 @@ func (aLog *ASCIICastLog) Read(p []byte) (n int, err error) {
 func (aLog *ASCIICastLog) Write(p []byte) (int, error) {
 	defer func(b []byte) {
 		if len(b) > 0 {
-			aLog.stdout <- b
+			aLog.logChan <- frame{
+				Type:  output,
+				Input: b,
+			}
 		}
 	}(p)
 	return aLog.readWriter.Write(p)
@@ -181,8 +185,7 @@ func (aLog *ASCIICastLog) Upload() (string, error) {
 // Close the STDOut keystroke channel for logging
 func (aLog *ASCIICastLog) Close() {
 	log.Debug("ASCIICastLog.Close() called")
-	close(aLog.stdin)
-	close(aLog.stdout)
+	close(aLog.logChan)
 	close(aLog.quit)
 	aLog.elapse = time.Since(aLog.createTime)
 }
