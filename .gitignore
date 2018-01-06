@@ -3,3 +3,4 @@ logs/**
 authorized_keys
 debug
 id_rsa
+vendor/**

@@ -10,7 +10,6 @@ before_install:
   - go get -v github.com/sirupsen/logrus
   - go get -v github.com/mattn/go-colorable
   - go get -v github.com/rifflock/lfshook
-  - go get -v github.com/mkishere/binutils
 
 install:
   - go get -d -v ./...
