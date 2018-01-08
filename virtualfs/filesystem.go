@@ -32,12 +32,12 @@ var (
 type VirtualFS interface {
 	Root() *Node
 	OpenFile(string, os.FileMode) error
-	ReadDir(string) (map[string]os.FileInfo, error)
+	ReadDir(string) (map[string]*Node, error)
+	IsExist(string) bool
 }
 
 type virtualFS struct {
 	root *Node
-	cPos *Node
 	lock sync.RWMutex
 }
 
@@ -57,16 +57,8 @@ type File struct {
 	buf bytes.Buffer
 }
 
-type fileInfo struct {
-	name    string
-	size    int64
-	mode    os.FileMode
-	modTime time.Time
-	sys     interface{}
-}
-
-// Init initalized the tree, which creates the root directory
-func Init() VirtualFS {
+// NewFS initalized the tree, which creates the root directory
+func NewFS() VirtualFS {
 	return &virtualFS{
 		root: createNode(os.ModeType),
 	}
@@ -80,6 +72,14 @@ func createNode(mode os.FileMode) (n *Node) {
 		n.Children = make(map[string]*Node)
 	}
 	return
+}
+
+func (t *virtualFS) IsExist(path string) bool {
+	_, err := t.fetchNode(path)
+	if err != nil {
+		return false
+	}
+	return true
 }
 
 // Mkdir creates a new directory according to the path argument passed in
@@ -100,12 +100,8 @@ func (t *virtualFS) Mkdir(path string, mode os.FileMode) error {
 
 func (t *virtualFS) fetchNode(path string) (*Node, error) {
 	path = pathlib.Clean(path)
-	var cwd *Node
-	if pathlib.IsAbs(path) {
-		cwd = t.root
-	} else {
-		cwd = t.cPos
-	}
+	cwd := t.root
+
 	if path == "/" {
 		return t.root, nil
 	}
@@ -123,7 +119,7 @@ func (t *virtualFS) fetchNode(path string) (*Node, error) {
 	return cwd, nil
 }
 
-func (t *virtualFS) ReadDir(path string) (map[string]*os.FileInfo, error) {
+func (t *virtualFS) ReadDir(path string) (map[string]*Node, error) {
 	dir, err := t.fetchNode(path)
 	if err != nil {
 		return nil, err
@@ -209,9 +205,9 @@ func (t *virtualFS) Stat(path string) (os.FileInfo, error) {
 	return childNode, nil
 }
 
-func (n *Node) IsDir() bool {
-	return n.FileMode&os.ModeDir != 0
-}
+func (t *virtualFS) Root() *Node { return t.root }
+
+func (n *Node) IsDir() bool { return n.FileMode&os.ModeDir != 0 }
 
 func (n *Node) ModTime() time.Time {
 	return time.Now()
