@@ -128,7 +128,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 				req.Reply(true, nil)
 			case "subsystem":
 				var subsys string
-				ssh.Unmarshal(req.Payload, &s)
+				ssh.Unmarshal(req.Payload, &subsys)
 				s.log.Infof("User requested subsystem %v", subsys)
 				req.Reply(true, nil)
 			case "window-change":
