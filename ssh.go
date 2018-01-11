@@ -90,7 +90,6 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 	go func(in <-chan *ssh.Request) {
 		for req := range in {
 
-			s.log.Infof("Request: %v", req.Type)
 			switch req.Type {
 			case "winadj@putty.projects.tartarus.org", "simple@putty.projects.tartarus.org":
 				//Do nothing here
@@ -99,10 +98,10 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 				// We are creating a pseudo-PTY
 				var ptyreq ptyRequest
 				if err := ssh.Unmarshal(req.Payload, &ptyreq); err != nil {
-					s.log.WithError(err).Errorln("Cannot parse user request payload")
+					s.log.WithField("reqType", req.Type).WithError(err).Errorln("Cannot parse user request payload")
 					req.Reply(false, nil)
 				} else {
-					s.log.Infof("User requesting pty(%v %vx%v)", ptyreq.Term, ptyreq.Width, ptyreq.Height)
+					s.log.WithField("reqType", req.Type).Infof("User requesting pty(%v %vx%v)", ptyreq.Term, ptyreq.Width, ptyreq.Height)
 					s.ptyReq = &ptyreq
 					req.Reply(true, nil)
 				}
@@ -111,11 +110,15 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 				if err := ssh.Unmarshal(req.Payload, &envReq); err != nil {
 					req.Reply(false, nil)
 				} else {
-					s.log.Infof("User sends envvar:%v=%v", envReq.Name, envReq.Value)
+					s.log.WithFields(log.Fields{
+						"reqType":     req.Type,
+						"envVarName":  envReq.Name,
+						"envVarValue": envReq.Value,
+					}).Infof("User sends envvar:%v=%v", envReq.Name, envReq.Value)
 					req.Reply(true, nil)
 				}
 			case "shell":
-				s.log.Info("User requesting shell access")
+				s.log.WithField("reqType", req.Type).Info("User requesting shell access")
 				if s.ptyReq == nil {
 					s.ptyReq = &ptyRequest{
 						Width:  80,
@@ -129,9 +132,13 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 			case "subsystem":
 				var subsys string
 				ssh.Unmarshal(req.Payload, &subsys)
-				s.log.Infof("User requested subsystem %v", subsys)
+				s.log.WithFields(log.Fields{
+					"reqType":   req.Type,
+					"subSystem": subsys,
+				}).Infof("User requested subsystem %v", subsys)
 				req.Reply(true, nil)
 			case "window-change":
+				s.log.WithField("reqType", req.Type).Info("User shell window size changed")
 				if s.term == nil {
 					req.Reply(false, nil)
 				} else {
@@ -143,7 +150,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 					req.Reply(true, nil)
 				}
 			default:
-				s.log.Infof("Unknown channel request type %v", req.Type)
+				s.log.WithField("reqType", req.Type).Infof("Unknown channel request type %v", req.Type)
 			}
 		}
 	}(requests)
@@ -156,10 +163,10 @@ func (s *SSHSession) handleNewConn() {
 		// protocol intended. In the case of a shell, the type is
 		// "session" and ServerShell may be used to present a simple
 		// terminal interface.
-		s.log.Infof("User created new channel(%v)", newChannel.ChannelType())
+		s.log.WithField("chanType", newChannel.ChannelType()).Infof("User created new session channel", newChannel.ChannelType())
 		if newChannel.ChannelType() != "session" {
 			newChannel.Reject(ssh.UnknownChannelType, "unknown channel type")
-			s.log.Infof("Unknown channel type %v", newChannel.ChannelType())
+			s.log.WithField("chanType", newChannel.ChannelType()).Infof("Unknown channel type %v", newChannel.ChannelType())
 			continue
 		} else {
 			go s.handleNewSession(newChannel)
@@ -186,7 +193,7 @@ func (s *SSHSession) NewShell(channel ssh.Channel) {
 cmdLoop:
 	for {
 		cmd, err := s.term.ReadLine()
-		s.log.Infof("User input command %v", cmd)
+		s.log.WithField("cmd", cmd).Infof("User input command %v", cmd)
 		switch {
 		case err != nil:
 			if err.Error() == "EOF" {
@@ -213,7 +220,7 @@ func createSessionHandler(c <-chan net.Conn, sshConfig *ssh.ServerConfig) {
 	for conn := range c {
 		sshSession, err := NewSSHSession(conn, sshConfig)
 		if err != nil {
-			log.WithField("srcIP", conn.RemoteAddr()).WithError(err).Error("Error establishing SSH connection")
+			log.WithField("srcIP", conn.RemoteAddr().String()).WithError(err).Error("Error establishing SSH connection")
 		}
 		sshSession.handleNewConn()
 		conn.Close()
