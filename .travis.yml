@@ -5,12 +5,6 @@ go:
   - 1.8.x
   - 1.9.x
 
-before_install:
-  - go get -v github.com/imdario/mergo
-  - go get -v github.com/sirupsen/logrus
-  - go get -v github.com/mattn/go-colorable
-  - go get -v github.com/rifflock/lfshook
-
 install:
   - go get -d -v ./...
 

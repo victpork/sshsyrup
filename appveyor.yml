@@ -1,0 +1,19 @@
+version: "{build}"
+
+platform: x64
+
+clone_folder: c:\gopath\src\github.com\mkishere\sshsyrup
+
+environment:
+  GOPATH: c:\gopath
+
+install:
+  - echo %PATH%
+  - echo %GOPATH%
+  - git submodule update --init --recursive
+  - go version
+  - go env
+  - go get -v -t ./...
+
+build_script:
+- go build -v ./...

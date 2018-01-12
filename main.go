@@ -124,7 +124,7 @@ func main() {
 	for {
 		nConn, err := listener.Accept()
 
-		log.WithField("srcIP", nConn.RemoteAddr()).Info("Connection established")
+		log.WithField("srcIP", nConn.RemoteAddr().String()).Info("Connection established")
 		if err != nil {
 			log.WithError(err).Error("Failed to accept incoming connection")
 			continue
