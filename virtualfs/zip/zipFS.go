@@ -69,9 +69,9 @@ func CreateZipFS(file string, uidMap, gidMap map[int]string) (*virtualfs.Virtual
 	// Start to build index
 	for _, f := range r.File {
 		fileInfo := readExtraHeader(f.FileHeader.Extra)
-
+		filePath := "/" + f.Name
 		if f.FileInfo().IsDir() {
-			vfs.Mkdir(f.Name, uidMap[fileInfo.UID], gidMap[fileInfo.GID], f.FileInfo().Mode())
+			vfs.Mkdir(filePath, uidMap[fileInfo.UID], gidMap[fileInfo.GID], f.FileInfo().Mode())
 		} else {
 			if f.UncompressedSize64 > 0 {
 				r, err := f.Open()
@@ -79,9 +79,9 @@ func CreateZipFS(file string, uidMap, gidMap map[int]string) (*virtualfs.Virtual
 					// Skip if error
 					continue
 				}
-				vfs.Mkfile(f.Name, uidMap[fileInfo.UID], gidMap[fileInfo.GID], f.FileInfo().Mode(), &r)
+				vfs.Mkfile(filePath, uidMap[fileInfo.UID], gidMap[fileInfo.GID], f.FileInfo().Mode(), &r)
 			} else {
-				vfs.Mkfile(f.Name, uidMap[fileInfo.UID], gidMap[fileInfo.GID], f.FileInfo().Mode(), nil)
+				vfs.Mkfile(filePath, uidMap[fileInfo.UID], gidMap[fileInfo.GID], f.FileInfo().Mode(), nil)
 			}
 		}
 	}
