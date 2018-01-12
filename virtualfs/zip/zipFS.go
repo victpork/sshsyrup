@@ -30,11 +30,11 @@ func readExtraHeader(dataField []byte) (fileInfo *unixFileInfo) {
 		case 0x7875: // UNIX UID/GID
 			fileInfo = &unixFileInfo{}
 			pos++ // skip version field
-			uidLen := int(dataField[pos+1])
+			uidLen := int(dataField[pos])
 			pos++
 			fileInfo.UID = int(readVariableInt(dataField[pos : pos+uidLen]))
 			pos += uidLen
-			gidLen := int(dataField[pos+1])
+			gidLen := int(dataField[pos])
 			pos++
 			fileInfo.GID = int(readVariableInt(dataField[pos : pos+gidLen]))
 			pos += gidLen

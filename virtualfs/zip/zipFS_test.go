@@ -6,7 +6,7 @@ func TestCreateFSFromZip(t *testing.T) {
 	idmap := map[int]string{
 		0: "root",
 	}
-	vfs, err := CreateZipFS("../../demofs.zip", idmap, idmap)
+	vfs, err := CreateZipFS("../../filesystem.zip", idmap, idmap)
 	if err != nil {
 		t.Error("Error creating filesystem from zip")
 		return
