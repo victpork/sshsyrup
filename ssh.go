@@ -163,7 +163,7 @@ func (s *SSHSession) handleNewConn() {
 		// protocol intended. In the case of a shell, the type is
 		// "session" and ServerShell may be used to present a simple
 		// terminal interface.
-		s.log.WithField("chanType", newChannel.ChannelType()).Infof("User created new session channel", newChannel.ChannelType())
+		s.log.WithField("chanType", newChannel.ChannelType()).Info("User created new session channel")
 		if newChannel.ChannelType() != "session" {
 			newChannel.Reject(ssh.UnknownChannelType, "unknown channel type")
 			s.log.WithField("chanType", newChannel.ChannelType()).Infof("Unknown channel type %v", newChannel.ChannelType())
