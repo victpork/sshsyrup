@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mkishere/sshsyrup/util/termlogger"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/mkishere/sshsyrup/util/termlogger"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/terminal"
 )
@@ -190,6 +190,8 @@ func (s *SSHSession) NewShell(channel ssh.Channel) {
 		channel.SendRequest("exit-status", false, []byte{0, 0, 0, 0})
 		channel.Close()
 	}()
+	// Should preload when server starts
+	sh := NewShell("/home/"+s.user, channel, vfs)
 cmdLoop:
 	for {
 		cmd, err := s.term.ReadLine()
@@ -207,10 +209,9 @@ cmdLoop:
 		case cmd == "logout", cmd == "quit":
 			s.log.Infof("User logged out")
 			return
-		case strings.HasPrefix(cmd, "ls"):
-
 		default:
 			args := strings.SplitN(cmd, " ", 2)
+			sh.Exec(args[0], args[1:])
 			s.term.Write([]byte(fmt.Sprintf("%v: command not found\n", args[0])))
 		}
 	}

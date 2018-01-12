@@ -10,6 +10,8 @@ import (
 
 	"github.com/imdario/mergo"
 	colorable "github.com/mattn/go-colorable"
+	"github.com/mkishere/sshsyrup/virtualfs"
+	"github.com/mkishere/sshsyrup/virtualfs/zip"
 	"github.com/rifflock/lfshook"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
@@ -25,6 +27,9 @@ type Config struct {
 	SvrMaxConn      int               `json:"server.maxConnections"`
 	SvrUserList     map[string]string `json:"server.userList"`
 	SvrTimeout      time.Duration     `json:"server.Timeout"`
+	SvrVFSImgFile   string            `json:"server.virtualFSImage"`
+	VFSReadOnly     bool              `json:"virtualfs.readOnly"`
+	VFSWriteToImage bool              `json:"virtualfs.writeToImage"`
 	AcinemaAPIEndPt string            `json:"asciinema.apiEndpoint"`
 	AcinemaAPIKey   string            `json:"asciinema.apiKey"`
 }
@@ -46,8 +51,10 @@ var (
 			"testuser": "tiger",
 		},
 		SvrTimeout:      time.Duration(time.Minute * 10),
+		SvrVFSImgFile:   "demofs.zip",
 		AcinemaAPIEndPt: "https://asciinema.org",
 	}
+	vfs *virtualfs.VirtualFS
 )
 
 func init() {
@@ -64,9 +71,18 @@ func init() {
 		pathMap,
 		&log.JSONFormatter{},
 	))
+
+	// Initalize VFS
+	var err error
+	idMap := map[int]string{0: "root"}
+	vfs, err = zip.CreateZipFS(config.SvrVFSImgFile, idMap, idMap)
+	if err != nil {
+		log.Error("Cannot create virtual filesystem")
+	}
 }
 
 func main() {
+
 	// Read banner
 	bannerFile, err := ioutil.ReadFile("banner.txt")
 	if err != nil {
