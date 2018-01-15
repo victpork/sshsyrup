@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/imdario/mergo"
@@ -27,7 +30,9 @@ type Config struct {
 	SvrMaxConn      int               `json:"server.maxConnections"`
 	SvrUserList     map[string]string `json:"server.userList"`
 	SvrTimeout      time.Duration     `json:"server.Timeout"`
-	SvrVFSImgFile   string            `json:"server.virtualFSImage"`
+	VFSImgFile      string            `json:"virtualfs.imageFile"`
+	VFSUIDMapFile   string            `json:"virtualfs.uidMappingFile"`
+	VFSGIDMapFile   string            `json:"virtualfs.gidMappingFile"`
 	VFSReadOnly     bool              `json:"virtualfs.readOnly"`
 	VFSWriteToImage bool              `json:"virtualfs.writeToImage"`
 	AcinemaAPIEndPt string            `json:"asciinema.apiEndpoint"`
@@ -44,14 +49,16 @@ var (
 		SvrAddr:         "0.0.0.0",
 		SvrPort:         2222,
 		SvrAllowRndUser: true,
-		SvrVer:          "SSH-2.0-OpenSSH_6.8p1",
+		SvrVer:          "SSH-2.0-OpenSSH_6.8p1 Ubuntu-2ubuntu2.8",
 		SvrMaxTries:     3,
 		SvrMaxConn:      10,
 		SvrUserList: map[string]string{
 			"testuser": "tiger",
 		},
 		SvrTimeout:      time.Duration(time.Minute * 10),
-		SvrVFSImgFile:   "demofs.zip",
+		VFSImgFile:      "filesystem.zip",
+		VFSUIDMapFile:   "passwd",
+		VFSGIDMapFile:   "group",
 		AcinemaAPIEndPt: "https://asciinema.org",
 	}
 	vfs *virtualfs.VirtualFS
@@ -74,8 +81,9 @@ func init() {
 
 	// Initalize VFS
 	var err error
-	idMap := map[int]string{0: "root"}
-	vfs, err = zip.CreateZipFS(config.SvrVFSImgFile, idMap, idMap)
+	// ID Mapping
+	uidMap, gidMap := loadIDMapping(config.VFSUIDMapFile), loadIDMapping(config.VFSGIDMapFile)
+	vfs, err = zip.CreateZipFS(config.VFSImgFile, uidMap, gidMap)
 	if err != nil {
 		log.Error("Cannot create virtual filesystem")
 	}
@@ -164,4 +172,26 @@ func loadConfiguration(file string) Config {
 		log.WithField("file", file).WithError(err).Errorf("Failed to parse configuration file")
 	}
 	return config
+}
+
+func loadIDMapping(file string) (m map[int]string) {
+	m = map[int]string{0: "root"}
+	f, err := os.OpenFile(file, os.O_RDONLY, 0666)
+	defer f.Close()
+	if err != nil {
+		return
+	}
+	buf := bufio.NewScanner(f)
+	linenum := 1
+	for buf.Scan() {
+		fields := strings.Split(buf.Text(), ":")
+		id, err := strconv.ParseInt(fields[2], 10, 32)
+		if err != nil {
+			log.Error("Cannot parse mapping file %v line %v", file, linenum)
+			continue
+		}
+		m[int(id)] = fields[0]
+		linenum++
+	}
+	return
 }
