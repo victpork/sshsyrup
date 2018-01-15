@@ -133,7 +133,11 @@ func (t *VirtualFS) ReadDir(path string) (map[string]*Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	return dir.Children, nil
+	roChildMap := make(map[string]*Node)
+	for k, v := range dir.Children {
+		roChildMap[k] = v
+	}
+	return roChildMap, nil
 }
 
 func (t *VirtualFS) Mkfile(path, uid, gid string, mode os.FileMode, contentReader *io.ReadCloser) error {
