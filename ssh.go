@@ -186,10 +186,7 @@ func (s *SSHSession) NewShell(channel ssh.Channel) {
 		config.AcinemaAPIEndPt, config.AcinemaAPIKey, channel, asciiLogParams)
 	s.term = terminal.NewTerminal(tLog, "$ ")
 	defer tLog.Close()
-	defer func() {
-		channel.SendRequest("exit-status", false, []byte{0, 0, 0, 0})
-		channel.Close()
-	}()
+	defer closeChannel(channel)
 cmdLoop:
 	for {
 		cmd, err := s.term.ReadLine()
@@ -225,4 +222,9 @@ func createSessionHandler(c <-chan net.Conn, sshConfig *ssh.ServerConfig) {
 		sshSession.handleNewConn()
 		conn.Close()
 	}
+}
+
+func closeChannel(ch ssh.Channel) {
+	ch.SendRequest("exit-status", false, []byte{0, 0, 0, 0})
+	ch.Close()
 }
