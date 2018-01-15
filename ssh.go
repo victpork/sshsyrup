@@ -130,8 +130,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 				go s.NewShell(channel)
 				req.Reply(true, nil)
 			case "subsystem":
-				var subsys string
-				ssh.Unmarshal(req.Payload, &subsys)
+				subsys := string(req.Payload[4:])
 				s.log.WithFields(log.Fields{
 					"reqType":   req.Type,
 					"subSystem": subsys,
@@ -149,6 +148,15 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 					s.term.SetSize(int(winChg.Width), int(winChg.Height))
 					req.Reply(true, nil)
 				}
+			case "exec":
+				cmd := string(req.Payload[4:])
+				s.log.WithFields(log.Fields{
+					"reqType": req.Type,
+					"cmd":     cmd,
+				}).Info("User request remote exec")
+				channel.Write([]byte(fmt.Sprintf("%v: command not found\n", cmd)))
+				req.Reply(true, nil)
+				closeChannel(channel)
 			default:
 				s.log.WithField("reqType", req.Type).Infof("Unknown channel request type %v", req.Type)
 			}
