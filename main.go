@@ -137,10 +137,10 @@ func main() {
 	}
 
 	listener, err := net.Listen("tcp", fmt.Sprintf("%v:%v", config.SvrAddr, config.SvrPort))
-	defer listener.Close()
 	if err != nil {
-		log.WithError(err).Error("Could not create listening socket")
+		log.WithError(err).Fatal("Could not create listening socket")
 	}
+	defer listener.Close()
 
 	for {
 		nConn, err := listener.Accept()
