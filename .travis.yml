@@ -46,6 +46,6 @@ deploy:
 
   skip_cleanup: true
   on:
-    go: 1.9.x
+    go: 1.9.2
     branch: master
     tags: true
