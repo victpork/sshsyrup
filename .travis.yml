@@ -40,8 +40,8 @@ deploy:
   provider: releases
   api_key: $AUTH_TOKEN
   file:
-    - "sshsyrup${TRAVIS_TAG}-darwin-amd64.tgz"
-    - "sshsyrup${TRAVIS_TAG}-linux-amd64.tgz"
+    - "sshsyrup${TRAVIS_TAG}-darwin-amd64.tar.gz"
+    - "sshsyrup${TRAVIS_TAG}-linux-amd64.tar.gz"
     - "sshsyrup${TRAVIS_TAG}-windows-amd64.zip"
 
   skip_cleanup: true
