@@ -24,22 +24,24 @@ type Shell struct {
 	sessionLog *termlogger.Logger
 	width      int
 	height     int
+	termSignal chan<- int
 }
 
 type Command interface {
 	Exec([]string) int
 }
 
-func NewShell(iostream io.ReadWriter, fsys *virtualfs.VirtualFS, width, height int, user, ipSrc string, log *log.Entry) *Shell {
+func NewShell(iostream io.ReadWriter, fsys *virtualfs.VirtualFS, width, height int, user, ipSrc string, log *log.Entry, termSignal chan<- int) *Shell {
 	fMap := make(map[string]Command)
 	return &Shell{
-		iostream: iostream,
-		cwd:      "/home/" + user,
-		fs:       fsys,
-		funcMap:  fMap,
-		width:    width,
-		height:   height,
-		log:      log,
+		iostream:   iostream,
+		cwd:        "/home/" + user,
+		fs:         fsys,
+		funcMap:    fMap,
+		width:      width,
+		height:     height,
+		log:        log,
+		termSignal: termSignal,
 	}
 }
 
@@ -64,6 +66,7 @@ cmdLoop:
 			//Do nothing
 		case cmd == "logout", cmd == "quit":
 			sh.log.Infof("User logged out")
+			sh.termSignal <- 0
 			return
 		default:
 			args := strings.SplitN(cmd, " ", 2)

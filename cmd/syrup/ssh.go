@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/base64"
+	"encoding/binary"
 	"fmt"
 	"net"
 	"time"
@@ -85,82 +86,88 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 	}
 	var sh *os.Shell
 	go func(in <-chan *ssh.Request, channel ssh.Channel) {
-		defer closeChannel(channel)
-		for req := range in {
-
-			switch req.Type {
-			case "winadj@putty.projects.tartarus.org", "simple@putty.projects.tartarus.org":
-				//Do nothing here
-			case "pty-req":
-				// Of coz we are not going to create a PTY here as we are honeypot.
-				// We are creating a pseudo-PTY
-				var ptyreq ptyRequest
-				if err := ssh.Unmarshal(req.Payload, &ptyreq); err != nil {
-					s.log.WithField("reqType", req.Type).WithError(err).Errorln("Cannot parse user request payload")
-					req.Reply(false, nil)
-				} else {
-					s.log.WithField("reqType", req.Type).Infof("User requesting pty(%v %vx%v)", ptyreq.Term, ptyreq.Width, ptyreq.Height)
-					s.ptyReq = &ptyreq
-					req.Reply(true, nil)
-				}
-			case "env":
-				var envReq envRequest
-				if err := ssh.Unmarshal(req.Payload, &envReq); err != nil {
-					req.Reply(false, nil)
-				} else {
-					s.log.WithFields(log.Fields{
-						"reqType":     req.Type,
-						"envVarName":  envReq.Name,
-						"envVarValue": envReq.Value,
-					}).Infof("User sends envvar:%v=%v", envReq.Name, envReq.Value)
-					req.Reply(true, nil)
-				}
-			case "shell":
-				s.log.WithField("reqType", req.Type).Info("User requesting shell access")
-				if s.ptyReq == nil {
-					s.ptyReq = &ptyRequest{
-						Width:  80,
-						Height: 24,
-						Term:   "vt100",
-					}
-				}
-				// The need of a goroutine here is that PuTTY will wait for reply before acknowledge it enters shell mode
-				asciiLogParams := map[string]string{
-					"TERM": s.ptyReq.Term,
-					"USER": s.user,
-					"SRC":  s.src.String(),
-				}
-				tLog := termlogger.NewACastLogger(80, 56,
-					config.AcinemaAPIEndPt, config.AcinemaAPIKey, channel, asciiLogParams)
-				sh = os.NewShell(tLog, vfs, int(s.ptyReq.Width), int(s.ptyReq.Height), s.user, s.src.String(), s.log)
-				go sh.HandleRequest(tLog)
-				req.Reply(true, nil)
-			case "subsystem":
-				subsys := string(req.Payload[4:])
-				s.log.WithFields(log.Fields{
-					"reqType":   req.Type,
-					"subSystem": subsys,
-				}).Infof("User requested subsystem %v", subsys)
-				req.Reply(true, nil)
-			case "window-change":
-				s.log.WithField("reqType", req.Type).Info("User shell window size changed")
-				if sh != nil {
-					var winChg *winChgRequest
-					if err := ssh.Unmarshal(req.Payload, winChg); err != nil {
+		quitSignal := make(chan int)
+		for {
+			select {
+			case req := <-in:
+				switch req.Type {
+				case "winadj@putty.projects.tartarus.org", "simple@putty.projects.tartarus.org":
+					//Do nothing here
+				case "pty-req":
+					// Of coz we are not going to create a PTY here as we are honeypot.
+					// We are creating a pseudo-PTY
+					var ptyreq ptyRequest
+					if err := ssh.Unmarshal(req.Payload, &ptyreq); err != nil {
+						s.log.WithField("reqType", req.Type).WithError(err).Errorln("Cannot parse user request payload")
 						req.Reply(false, nil)
+					} else {
+						s.log.WithField("reqType", req.Type).Infof("User requesting pty(%v %vx%v)", ptyreq.Term, ptyreq.Width, ptyreq.Height)
+						s.ptyReq = &ptyreq
+						req.Reply(true, nil)
 					}
-					sh.SetSize(int(winChg.Width), int(winChg.Height))
+				case "env":
+					var envReq envRequest
+					if err := ssh.Unmarshal(req.Payload, &envReq); err != nil {
+						req.Reply(false, nil)
+					} else {
+						s.log.WithFields(log.Fields{
+							"reqType":     req.Type,
+							"envVarName":  envReq.Name,
+							"envVarValue": envReq.Value,
+						}).Infof("User sends envvar:%v=%v", envReq.Name, envReq.Value)
+						req.Reply(true, nil)
+					}
+				case "shell":
+					s.log.WithField("reqType", req.Type).Info("User requesting shell access")
+					if s.ptyReq == nil {
+						s.ptyReq = &ptyRequest{
+							Width:  80,
+							Height: 24,
+							Term:   "vt100",
+						}
+					}
+					// The need of a goroutine here is that PuTTY will wait for reply before acknowledge it enters shell mode
+					asciiLogParams := map[string]string{
+						"TERM": s.ptyReq.Term,
+						"USER": s.user,
+						"SRC":  s.src.String(),
+					}
+					tLog := termlogger.NewACastLogger(80, 56,
+						config.AcinemaAPIEndPt, config.AcinemaAPIKey, channel, asciiLogParams)
+					sh = os.NewShell(tLog, vfs, int(s.ptyReq.Width), int(s.ptyReq.Height), s.user, s.src.String(), s.log, quitSignal)
+					go sh.HandleRequest(tLog)
+					req.Reply(true, nil)
+				case "subsystem":
+					subsys := string(req.Payload[4:])
+					s.log.WithFields(log.Fields{
+						"reqType":   req.Type,
+						"subSystem": subsys,
+					}).Infof("User requested subsystem %v", subsys)
+					req.Reply(true, nil)
+				case "window-change":
+					s.log.WithField("reqType", req.Type).Info("User shell window size changed")
+					if sh != nil {
+						var winChg *winChgRequest
+						if err := ssh.Unmarshal(req.Payload, winChg); err != nil {
+							req.Reply(false, nil)
+						}
+						sh.SetSize(int(winChg.Width), int(winChg.Height))
+					}
+				case "exec":
+					cmd := string(req.Payload[4:])
+					s.log.WithFields(log.Fields{
+						"reqType": req.Type,
+						"cmd":     cmd,
+					}).Info("User request remote exec")
+					channel.Write([]byte(fmt.Sprintf("%v: command not found\n", cmd)))
+					quitSignal <- 0
+					req.Reply(true, nil)
+				default:
+					s.log.WithField("reqType", req.Type).Infof("Unknown channel request type %v", req.Type)
 				}
-			case "exec":
-				cmd := string(req.Payload[4:])
-				s.log.WithFields(log.Fields{
-					"reqType": req.Type,
-					"cmd":     cmd,
-				}).Info("User request remote exec")
-				channel.Write([]byte(fmt.Sprintf("%v: command not found\n", cmd)))
-				req.Reply(true, nil)
-			default:
-				s.log.WithField("reqType", req.Type).Infof("Unknown channel request type %v", req.Type)
+			case ret := <-quitSignal:
+				defer closeChannel(channel, ret)
+				return
 			}
 		}
 	}(requests, channel)
@@ -195,7 +202,9 @@ func createSessionHandler(c <-chan net.Conn, sshConfig *ssh.ServerConfig) {
 	}
 }
 
-func closeChannel(ch ssh.Channel) {
-	ch.SendRequest("exit-status", false, []byte{0, 0, 0, 0})
+func closeChannel(ch ssh.Channel, signal int) {
+	b := make([]byte, 4)
+	binary.BigEndian.PutUint32(b, uint32(signal))
+	ch.SendRequest("exit-status", false, b)
 	ch.Close()
 }
