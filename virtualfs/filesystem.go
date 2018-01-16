@@ -37,14 +37,15 @@ type VirtualFS struct {
 
 // Node are for describing the filesystem object
 type Node struct {
-	FileMode  os.FileMode
-	Uid       string
-	Gid       string
-	modTime   time.Time
-	size      int64
-	Children  map[string]*Node
-	readWrite *io.ReadWriteCloser
-	Pointer   *Node
+	FileMode os.FileMode
+	Uid      string
+	Gid      string
+	modTime  time.Time
+	size     int64
+	Children map[string]*Node
+	reader   *io.ReadCloser
+	writer   *io.WriteCloser
+	Pointer  *Node
 }
 
 type File struct {
@@ -152,7 +153,7 @@ func (t *VirtualFS) Mkfile(path, uid, gid string, mode os.FileMode, contentReade
 		return NodeAlreadyExist
 	}
 	newFile := createNode(uid, gid, mode)
-	newFile.dataSrc = contentReader
+	newFile.reader = contentReader
 	newFile.modTime = time.Now()
 	newFile.size = 0
 	dirNode.Children[fileName] = newFile
@@ -175,7 +176,7 @@ func (t *VirtualFS) MkFileWithFileInfo(path, uid, gid string, fileInfo os.FileIn
 		return NodeAlreadyExist
 	}
 	newFile := createNode(uid, gid, fileInfo.Mode())
-	newFile.dataSrc = contentReader
+	newFile.reader = contentReader
 	newFile.modTime = fileInfo.ModTime()
 	newFile.size = fileInfo.Size()
 	dirNode.Children[fileName] = newFile
