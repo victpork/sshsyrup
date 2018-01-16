@@ -130,8 +130,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 				go s.NewShell(channel)
 				req.Reply(true, nil)
 			case "subsystem":
-				var subsys string
-				ssh.Unmarshal(req.Payload, &subsys)
+				subsys := string(req.Payload[4:])
 				s.log.WithFields(log.Fields{
 					"reqType":   req.Type,
 					"subSystem": subsys,
@@ -149,6 +148,15 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 					s.term.SetSize(int(winChg.Width), int(winChg.Height))
 					req.Reply(true, nil)
 				}
+			case "exec":
+				cmd := string(req.Payload[4:])
+				s.log.WithFields(log.Fields{
+					"reqType": req.Type,
+					"cmd":     cmd,
+				}).Info("User request remote exec")
+				channel.Write([]byte(fmt.Sprintf("%v: command not found\n", cmd)))
+				req.Reply(true, nil)
+				closeChannel(channel)
 			default:
 				s.log.WithField("reqType", req.Type).Infof("Unknown channel request type %v", req.Type)
 			}
@@ -163,7 +171,7 @@ func (s *SSHSession) handleNewConn() {
 		// protocol intended. In the case of a shell, the type is
 		// "session" and ServerShell may be used to present a simple
 		// terminal interface.
-		s.log.WithField("chanType", newChannel.ChannelType()).Infof("User created new session channel", newChannel.ChannelType())
+		s.log.WithField("chanType", newChannel.ChannelType()).Info("User created new session channel")
 		if newChannel.ChannelType() != "session" {
 			newChannel.Reject(ssh.UnknownChannelType, "unknown channel type")
 			s.log.WithField("chanType", newChannel.ChannelType()).Infof("Unknown channel type %v", newChannel.ChannelType())
@@ -186,12 +194,7 @@ func (s *SSHSession) NewShell(channel ssh.Channel) {
 		config.AcinemaAPIEndPt, config.AcinemaAPIKey, channel, asciiLogParams)
 	s.term = terminal.NewTerminal(tLog, "$ ")
 	defer tLog.Close()
-	defer func() {
-		channel.SendRequest("exit-status", false, []byte{0, 0, 0, 0})
-		channel.Close()
-	}()
-	// Should preload when server starts
-	sh := NewShell("/home/"+s.user, channel, vfs)
+	defer closeChannel(channel)
 cmdLoop:
 	for {
 		cmd, err := s.term.ReadLine()
@@ -211,7 +214,7 @@ cmdLoop:
 			return
 		default:
 			args := strings.SplitN(cmd, " ", 2)
-			sh.Exec(args[0], args[1:])
+			//sh.Exec(args[0], args[1:])
 			s.term.Write([]byte(fmt.Sprintf("%v: command not found\n", args[0])))
 		}
 	}
@@ -226,4 +229,9 @@ func createSessionHandler(c <-chan net.Conn, sshConfig *ssh.ServerConfig) {
 		sshSession.handleNewConn()
 		conn.Close()
 	}
+}
+
+func closeChannel(ch ssh.Channel) {
+	ch.SendRequest("exit-status", false, []byte{0, 0, 0, 0})
+	ch.Close()
 }

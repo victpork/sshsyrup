@@ -1,10 +1,11 @@
 [![Build Status](https://travis-ci.org/mkishere/sshsyrup.svg?branch=master)](http://travis-ci.org/mkishere/sshsyrup) [![Build status](https://ci.appveyor.com/api/projects/status/iy271guyn7ig81yn/branch/master?svg=true)](https://ci.appveyor.com/project/mkishere/sshsyrup/branch/master)
 # Syrup
-A simple SSH honeypot with abundant features
+A SSH honeypot with abundant features
 
 ### Features
 - SSH self-defined accounts and passwords, also allow any logins
 - Records shell sessions and upload to [asciinema.org](https://asciinema.org)
+- Virtual Filesystem for browsing (WIP)
 
 ### Requirements
 - Linux, Mac or Windows
@@ -13,7 +14,6 @@ A simple SSH honeypot with abundant features
 ### Building
 * Run the following command to get latest package and build it
 ```
-
 go get -u github.com/mkishere/sshsyrup
 cd ~/go/src/github.com/mkishere/sshsyrup
 go build -ldflags "-s -w" ./...
@@ -35,7 +35,7 @@ ssh-keygen -t rsa
 ```
 * Start the server
 ```
-    sshsyrup
+sshsyrup
 ```
 ### Config params
 Parameter Name | Description
@@ -67,5 +67,5 @@ cmd | The command user type in shell
 
 ### TODO
 - Virtual File System
-- Minimal set of POSIX commands
-- Mock SFTP/SCP
+- Minimal set of POSIX commands/utilites
+- Mock SFTP/SCP/Port forwarding

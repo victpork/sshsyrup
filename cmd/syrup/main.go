@@ -2,7 +2,9 @@ package main
 
 import (
 	"bufio"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -97,6 +99,15 @@ func main() {
 		bannerFile = []byte{}
 	}
 	sshConfig := &ssh.ServerConfig{
+		AuthLogCallback: func(c ssh.ConnMetadata, method string, err error) {
+			if method != "none" {
+				log.WithFields(log.Fields{
+					"user":       c.User(),
+					"srcIP":      c.RemoteAddr().String(),
+					"authMethod": method,
+				}).Infof("User trying to login with %v", method)
+			}
+		},
 
 		PasswordCallback: func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
 			log.WithFields(log.Fields{
@@ -107,11 +118,21 @@ func main() {
 			if stpass, exists := config.SvrUserList[c.User()]; exists && (stpass == string(pass) || stpass == "*") || config.SvrAllowRndUser {
 				return &ssh.Permissions{
 					Extensions: map[string]string{
-						"permit-agent-forwarding": "no",
+						"permit-agent-forwarding": "yes",
 					},
 				}, nil
 			}
 			return nil, fmt.Errorf("password rejected for %q", c.User())
+		},
+
+		PublicKeyCallback: func(c ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
+			log.WithFields(log.Fields{
+				"user":              c.User(),
+				"srcIP":             c.RemoteAddr().String(),
+				"pubKeyType":        key.Type(),
+				"pubKeyFingerprint": base64.StdEncoding.EncodeToString(key.Marshal()),
+			}).Info("User trying to login with key")
+			return nil, errors.New("Key rejected, revert to password login")
 		},
 
 		ServerVersion: config.SvrVer,
@@ -140,10 +161,10 @@ func main() {
 	}
 
 	listener, err := net.Listen("tcp", fmt.Sprintf("%v:%v", config.SvrAddr, config.SvrPort))
-	defer listener.Close()
 	if err != nil {
-		log.WithError(err).Error("Could not create listening socket")
+		log.WithError(err).Fatal("Could not create listening socket")
 	}
+	defer listener.Close()
 
 	for {
 		nConn, err := listener.Accept()
