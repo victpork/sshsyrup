@@ -37,14 +37,14 @@ type VirtualFS struct {
 
 // Node are for describing the filesystem object
 type Node struct {
-	FileMode os.FileMode
-	Uid      string
-	Gid      string
-	modTime  time.Time
-	size     int64
-	Children map[string]*Node
-	dataSrc  *io.ReadCloser
-	Pointer  *Node
+	FileMode  os.FileMode
+	Uid       string
+	Gid       string
+	modTime   time.Time
+	size      int64
+	Children  map[string]*Node
+	readWrite *io.ReadWriteCloser
+	Pointer   *Node
 }
 
 type File struct {
