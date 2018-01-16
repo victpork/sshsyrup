@@ -4,14 +4,12 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net"
-	"strings"
 	"time"
 
+	os "github.com/mkishere/sshsyrup/os"
 	"github.com/mkishere/sshsyrup/util/termlogger"
 	log "github.com/sirupsen/logrus"
-
 	"golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/terminal"
 )
 
 // SSHSession stores SSH session info
@@ -22,7 +20,6 @@ type SSHSession struct {
 	activity      chan bool
 	sshChan       <-chan ssh.NewChannel
 	ptyReq        *ptyRequest
-	term          *terminal.Terminal
 	log           *log.Entry
 }
 
@@ -86,8 +83,9 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 		s.log.WithError(err).Error("Could not accept channel")
 		return
 	}
-
-	go func(in <-chan *ssh.Request) {
+	var sh *os.Shell
+	go func(in <-chan *ssh.Request, channel ssh.Channel) {
+		defer closeChannel(channel)
 		for req := range in {
 
 			switch req.Type {
@@ -127,7 +125,15 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 					}
 				}
 				// The need of a goroutine here is that PuTTY will wait for reply before acknowledge it enters shell mode
-				go s.NewShell(channel)
+				asciiLogParams := map[string]string{
+					"TERM": s.ptyReq.Term,
+					"USER": s.user,
+					"SRC":  s.src.String(),
+				}
+				tLog := termlogger.NewACastLogger(80, 56,
+					config.AcinemaAPIEndPt, config.AcinemaAPIKey, channel, asciiLogParams)
+				sh = os.NewShell(tLog, vfs, int(s.ptyReq.Width), int(s.ptyReq.Height), s.user, s.src.String(), s.log)
+				go sh.HandleRequest(tLog)
 				req.Reply(true, nil)
 			case "subsystem":
 				subsys := string(req.Payload[4:])
@@ -138,15 +144,12 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 				req.Reply(true, nil)
 			case "window-change":
 				s.log.WithField("reqType", req.Type).Info("User shell window size changed")
-				if s.term == nil {
-					req.Reply(false, nil)
-				} else {
+				if sh != nil {
 					var winChg *winChgRequest
 					if err := ssh.Unmarshal(req.Payload, winChg); err != nil {
 						req.Reply(false, nil)
 					}
-					s.term.SetSize(int(winChg.Width), int(winChg.Height))
-					req.Reply(true, nil)
+					sh.SetSize(int(winChg.Width), int(winChg.Height))
 				}
 			case "exec":
 				cmd := string(req.Payload[4:])
@@ -156,12 +159,11 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 				}).Info("User request remote exec")
 				channel.Write([]byte(fmt.Sprintf("%v: command not found\n", cmd)))
 				req.Reply(true, nil)
-				closeChannel(channel)
 			default:
 				s.log.WithField("reqType", req.Type).Infof("Unknown channel request type %v", req.Type)
 			}
 		}
-	}(requests)
+	}(requests, channel)
 }
 
 func (s *SSHSession) handleNewConn() {
@@ -178,44 +180,6 @@ func (s *SSHSession) handleNewConn() {
 			continue
 		} else {
 			go s.handleNewSession(newChannel)
-		}
-	}
-}
-
-// NewShell creates new shell
-func (s *SSHSession) NewShell(channel ssh.Channel) {
-	asciiLogParams := map[string]string{
-		"TERM": s.ptyReq.Term,
-		"USER": s.user,
-		"SRC":  s.src.String(),
-	}
-
-	tLog := termlogger.NewACastLogger(int(s.ptyReq.Width), int(s.ptyReq.Height),
-		config.AcinemaAPIEndPt, config.AcinemaAPIKey, channel, asciiLogParams)
-	s.term = terminal.NewTerminal(tLog, "$ ")
-	defer tLog.Close()
-	defer closeChannel(channel)
-cmdLoop:
-	for {
-		cmd, err := s.term.ReadLine()
-		s.log.WithField("cmd", cmd).Infof("User input command %v", cmd)
-		switch {
-		case err != nil:
-			if err.Error() == "EOF" {
-				s.log.Info("EOF received from client")
-			} else {
-				s.log.WithError(err).Error("Error when reading terminal")
-			}
-			break cmdLoop
-		case strings.TrimSpace(cmd) == "":
-			//Do nothing
-		case cmd == "logout", cmd == "quit":
-			s.log.Infof("User logged out")
-			return
-		default:
-			args := strings.SplitN(cmd, " ", 2)
-			//sh.Exec(args[0], args[1:])
-			s.term.Write([]byte(fmt.Sprintf("%v: command not found\n", args[0])))
 		}
 	}
 }
