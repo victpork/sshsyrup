@@ -68,6 +68,21 @@ cmdLoop:
 			sh.log.Infof("User logged out")
 			sh.termSignal <- 0
 			return
+		case strings.HasPrefix(cmd, "ls"):
+			args := strings.Split(strings.Trim(cmd, " "), " ")
+			var path string
+			if len(args) > 1 {
+				path = args[1]
+			} else {
+				path = sh.cwd
+			}
+			dirList, err := sh.fs.ReadDir(path)
+			if err != nil {
+				t.Write([]byte(fmt.Sprintf("ls: cannot access %v: No such file or directory\n", path)))
+			}
+			for k := range dirList {
+				t.Write([]byte(k + "     "))
+			}
 		default:
 			args := strings.SplitN(cmd, " ", 2)
 			//sh.Exec(args[0], args[1:])
