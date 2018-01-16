@@ -6,9 +6,6 @@ go:
   - 1.9.x
   - master
 
-install:
-  - go get -d -v ./...
-
 script:
   - go test -v ./...
 
@@ -21,17 +18,22 @@ before_deploy:
       GOOS=${PLATFORM%/*}
       GOARCH=${PLATFORM#*/}
       if [ "$GOOS" = "windows" ]; then
-        build_cmd="GOOS=$GOOS GOARCH=$GOARCH go build -o sshsyrup.exe -ldflags '-w -s'"
+        build_syrup_cmd="GOOS=$GOOS GOARCH=$GOARCH go build -o sshsyrup.exe -ldflags '-w -s' ./cmd/syrup"
+        build_createfs_cmd="GOOS=$GOOS GOARCH=$GOARCH go build -o createfs.exe -ldflags '-w -s' ./cmd/createfs"
       else
-        build_cmd="CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH go build -o sshsyrup -ldflags '-w -s'"
+        build_syrup_cmd="CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH go build -o sshsyrup -ldflags '-w -s' ./cmd/syrup"
+        build_createfs_cmd="CGO_ENABLED=0 GOOS=$GOOS GOARCH=$GOARCH go build -o createfs -ldflags '-w -s' ./cmd/createfs"
       fi
-      if ! eval $build_cmd; then
+      if ! eval $build_syrup_cmd; then
         echo "Failed building sshsyrup for $PLATFORM" && return 1
       fi
+      if ! eval $build_createfs_cmd; then
+        echo "Failed building createfs for $PLATFORM" && return 1
+      fi
       if [ "$GOOS" = "windows" ]; then
-        zip sshsyrup${TRAVIS_TAG}-${GOOS}-${GOARCH}.zip sshsyrup.exe
+        zip sshsyrup${TRAVIS_TAG}-${GOOS}-${GOARCH}.zip sshsyrup.exe createfs.exe config.json logs/.gitignore logs/sessions/.gitignore
       else
-        tar cvzf sshsyrup${TRAVIS_TAG}-${GOOS}-${GOARCH}.tar.gz sshsyrup
+        tar cvzf sshsyrup${TRAVIS_TAG}-${GOOS}-${GOARCH}.tar.gz sshsyrup createfs config.json logs/.gitignore logs/sessions/.gitignore
       fi
     done
   - ls
