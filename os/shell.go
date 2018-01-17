@@ -1,4 +1,4 @@
-package shell
+package os
 
 import (
 	"fmt"
@@ -25,6 +25,7 @@ type Shell struct {
 	width      int
 	height     int
 	termSignal chan<- int
+	terminal   *terminal.Terminal
 }
 
 type Command interface {
@@ -46,13 +47,10 @@ func NewShell(iostream io.ReadWriter, fsys *virtualfs.VirtualFS, width, height i
 }
 
 func (sh *Shell) HandleRequest(tLog termlogger.Logger) {
-	t := terminal.NewTerminal(sh.iostream, "> ")
-	/* tLog := termlogger.NewACastLogger(sh.width, sh.height,
-	config.AcinemaAPIEndPt, config.AcinemaAPIKey, sh.iostream, asciiLogParams) */
-	defer tLog.Close()
+	sh.terminal = terminal.NewTerminal(sh.iostream, "$ ")
 cmdLoop:
 	for {
-		cmd, err := t.ReadLine()
+		cmd, err := sh.terminal.ReadLine()
 		sh.log.WithField("cmd", cmd).Infof("User input command %v", cmd)
 		switch {
 		case err != nil:
@@ -78,15 +76,15 @@ cmdLoop:
 			}
 			dirList, err := sh.fs.ReadDir(path)
 			if err != nil {
-				t.Write([]byte(fmt.Sprintf("ls: cannot access %v: No such file or directory\n", path)))
+				sh.terminal.Write([]byte(fmt.Sprintf("ls: cannot access %v: No such file or directory\n", path)))
 			}
 			for k := range dirList {
-				t.Write([]byte(k + "     "))
+				sh.terminal.Write([]byte(k + "     "))
 			}
 		default:
 			args := strings.SplitN(cmd, " ", 2)
 			//sh.Exec(args[0], args[1:])
-			t.Write([]byte(fmt.Sprintf("%v: command not found\n", args[0])))
+			sh.terminal.Write([]byte(fmt.Sprintf("%v: command not found\n", args[0])))
 		}
 	}
 }
@@ -127,6 +125,6 @@ func (sh *Shell) Exec(path string, args []string) (io.ReadWriter, error) {
 	return nil, nil
 }
 
-func (sh *Shell) SetSize(width, height int) {
-
+func (sh *Shell) SetSize(width, height int) error {
+	return sh.terminal.SetSize(width, height)
 }

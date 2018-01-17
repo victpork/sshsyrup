@@ -86,7 +86,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 	}
 	var sh *os.Shell
 	go func(in <-chan *ssh.Request, channel ssh.Channel) {
-		quitSignal := make(chan int)
+		quitSignal := make(chan int, 1)
 		for {
 			select {
 			case req := <-in:
@@ -134,6 +134,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 					}
 					tLog := termlogger.NewACastLogger(80, 56,
 						config.AcinemaAPIEndPt, config.AcinemaAPIKey, channel, asciiLogParams)
+					defer tLog.Close()
 					sh = os.NewShell(tLog, vfs, int(s.ptyReq.Width), int(s.ptyReq.Height), s.user, s.src.String(), s.log, quitSignal)
 					go sh.HandleRequest(tLog)
 					req.Reply(true, nil)
