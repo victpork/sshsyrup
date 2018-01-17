@@ -105,8 +105,16 @@ func main() {
 			fmt.Println(err)
 			return err
 		}
-
-		if !stripData {
+		if info.Mode()&os.ModeSymlink != 0 {
+			dst, err := os.Readlink(path)
+			if err != nil {
+				return err
+			}
+			_, err = w.Write([]byte(dst))
+			if err != nil {
+				return err
+			}
+		} else if !stripData {
 			file, err := os.Open(path)
 			if err != nil {
 				fmt.Println(err)
