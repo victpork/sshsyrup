@@ -138,9 +138,8 @@ func (aLog *ASCIICastLog) Read(p []byte) (n int, err error) {
 	defer func(b []byte) {
 		if len(b) > 0 {
 			aLog.logChan <- frame{
-				Type: input,
-
-				Input: b[:bytes.IndexByte(b, 0)],
+				Type:  input,
+				Input: b[:n],
 			}
 		}
 	}(p)
