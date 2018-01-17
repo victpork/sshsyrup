@@ -24,10 +24,11 @@ type Command interface {
 
 // System emulates what most of os/sys does in the honeyport
 type System struct {
-	cwd     string
-	FSys    *virtualfs.VirtualFS
-	io      io.ReadWriter
-	envVars map[string]string
+	cwd           string
+	FSys          *virtualfs.VirtualFS
+	io            io.ReadWriter
+	envVars       map[string]string
+	Width, Height int
 }
 
 type stdoutWrapper struct {

@@ -22,8 +22,6 @@ type Shell struct {
 	iostream   io.ReadWriter
 	log        *log.Entry
 	sessionLog *termlogger.Logger
-	width      int
-	height     int
 	termSignal chan<- int
 	terminal   *terminal.Terminal
 	sys        *System
@@ -35,11 +33,11 @@ func NewShell(iostream io.ReadWriter, fsys *virtualfs.VirtualFS, width, height i
 		FSys:    fsys,
 		cwd:     "/home/" + user,
 		envVars: map[string]string{},
+		Width:   width,
+		Height:  height,
 	}
 	return &Shell{
 		iostream:   iostream,
-		width:      width,
-		height:     height,
 		log:        log,
 		termSignal: termSignal,
 		sys:        sys,
@@ -104,6 +102,8 @@ func (sh *Shell) Exec(path string, args []string) (int, error) {
 }
 
 func (sh *Shell) SetSize(width, height int) error {
+	sh.sys.Width = width
+	sh.sys.Height = height
 	return sh.terminal.SetSize(width, height)
 }
 
