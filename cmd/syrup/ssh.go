@@ -132,11 +132,11 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 						"USER": s.user,
 						"SRC":  s.src.String(),
 					}
-					tLog := termlogger.NewACastLogger(80, 56,
-						config.AcinemaAPIEndPt, config.AcinemaAPIKey, channel, asciiLogParams)
+					tLog := termlogger.NewLogger(termlogger.NewACastLogger(80, 56,
+						config.AcinemaAPIEndPt, config.AcinemaAPIKey, asciiLogParams), channel)
 					defer tLog.Close()
 					sh = os.NewShell(tLog, vfs, int(s.ptyReq.Width), int(s.ptyReq.Height), s.user, s.src.String(), s.log, quitSignal)
-					go sh.HandleRequest(tLog)
+					go sh.HandleRequest()
 					req.Reply(true, nil)
 				case "subsystem":
 					subsys := string(req.Payload[4:])

@@ -68,6 +68,8 @@ func (sys *System) Out() io.Writer {
 	return stdoutWrapper{out: sys.io}
 }
 
+func (sys *System) IOStream() io.ReadWriter { return sys.io }
+
 // Write replace \n with \r\n before writing to the underlying io.Writer.
 // Copied from golang.org/x/crypto/ssh/terminal
 func (sw stdoutWrapper) Write(buf []byte) (n int, err error) {

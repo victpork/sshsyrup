@@ -7,8 +7,6 @@ import (
 	pathlib "path"
 	"strings"
 
-	"github.com/mkishere/sshsyrup/util/termlogger"
-
 	"github.com/mkishere/sshsyrup/virtualfs"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh/terminal"
@@ -19,9 +17,7 @@ var (
 )
 
 type Shell struct {
-	iostream   io.ReadWriter
 	log        *log.Entry
-	sessionLog *termlogger.Logger
 	termSignal chan<- int
 	terminal   *terminal.Terminal
 	sys        *System
@@ -37,15 +33,14 @@ func NewShell(iostream io.ReadWriter, fsys *virtualfs.VirtualFS, width, height i
 		Height:  height,
 	}
 	return &Shell{
-		iostream:   iostream,
 		log:        log,
 		termSignal: termSignal,
 		sys:        sys,
 	}
 }
 
-func (sh *Shell) HandleRequest(tLog termlogger.Logger) {
-	sh.terminal = terminal.NewTerminal(sh.iostream, "$ ")
+func (sh *Shell) HandleRequest() {
+	sh.terminal = terminal.NewTerminal(sh.sys.IOStream(), "$ ")
 cmdLoop:
 	for {
 		cmd, err := sh.terminal.ReadLine()
@@ -69,12 +64,14 @@ cmdLoop:
 		case strings.HasPrefix(cmd, "export"):
 
 		default:
+			// Start parsing script
+
 			args := strings.SplitN(cmd, " ", 2)
 			n, err := sh.Exec(args[0], args[1:])
 			if err != nil {
 				sh.terminal.Write([]byte(fmt.Sprintf("%v: command not found\n", args[0])))
 			} else {
-				sh.sys.envVars["$?"] = string(n)
+				sh.sys.envVars["?"] = string(n)
 			}
 		}
 	}
