@@ -140,5 +140,5 @@ func (aLog *AsciinemaHook) Close() error {
 }
 
 func (aLog *AsciinemaHook) Levels() []log.Level {
-	return log.AllLevels
+	return []log.Level{log.InfoLevel}
 }
