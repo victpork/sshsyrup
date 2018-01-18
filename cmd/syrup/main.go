@@ -15,7 +15,7 @@ import (
 
 	"github.com/imdario/mergo"
 	colorable "github.com/mattn/go-colorable"
-	"github.com/mkishere/sshsyrup/os/command"
+	_ "github.com/mkishere/sshsyrup/os/command"
 	"github.com/mkishere/sshsyrup/virtualfs"
 	"github.com/mkishere/sshsyrup/virtualfs/zip"
 	"github.com/rifflock/lfshook"
@@ -92,7 +92,6 @@ func init() {
 	if err != nil {
 		log.Error("Cannot create virtual filesystem")
 	}
-	command.LoadCommand()
 }
 
 func main() {
