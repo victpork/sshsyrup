@@ -1,11 +1,17 @@
 package termlogger
 
 import (
-	"io"
+	"time"
 )
 
-// Logger interface for different format loggers
-type Logger interface {
-	io.ReadWriter
-	Close()
+type frame struct {
+	Time  time.Time
+	Type  string
+	Input []byte
+}
+
+// Formatter is for Logger to store logs coming from user shell sessions
+type Formatter interface {
+	WriteLog(frame) error
+	Close() error
 }

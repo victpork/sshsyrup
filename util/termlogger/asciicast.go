@@ -9,16 +9,11 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 )
-
-type frame struct {
-	Time  time.Time
-	Type  string
-	Input []byte
-}
 
 type asciiCast struct {
 	Version   int               `json:"version"`
@@ -35,14 +30,13 @@ type ASCIICastLog struct {
 	data        asciiCast
 	fileName    string
 	createTime  time.Time
-	readWriter  io.ReadWriter
 	logChan     chan frame
 	userName    string
 	apikey      string
 	apiEndpoint string
 	elapse      time.Duration
 	htClient    *http.Client
-	quit        chan struct{}
+	lock        sync.Mutex
 }
 
 const (
@@ -52,7 +46,7 @@ const (
 )
 
 // NewACastLogger creates a new ASCIICast logger
-func NewACastLogger(width, height int, apiEndPt, apiKey string, input io.ReadWriter, params map[string]string) Logger {
+func NewACastLogger(width, height int, apiEndPt, apiKey string, params map[string]string) Formatter {
 	now := time.Now()
 	header := asciiCast{
 		Version:   2,
@@ -70,7 +64,6 @@ func NewACastLogger(width, height int, apiEndPt, apiKey string, input io.ReadWri
 	}
 	aLog := &ASCIICastLog{
 		data:        header,
-		readWriter:  input,
 		createTime:  now,
 		apikey:      apiKey,
 		apiEndpoint: apiEndPt,
@@ -92,79 +85,36 @@ func NewACastLogger(width, height int, apiEndPt, apiKey string, input io.ReadWri
 		log.WithField("path", aLog.fileName).WithError(err).Errorf("Error when writing log file")
 		return nil
 	}
-	aLog.logChan = make(chan frame, 10)
-	aLog.quit = make(chan struct{})
 
-	go func(fChan <-chan frame, quit <-chan struct{}) {
-	Logloop:
-		for {
-			select {
-			case f := <-fChan:
-				aLog.writeLog(f)
-			case <-quit:
-				break Logloop
-			}
-		}
-		// Upload cast to asciinema.org
-		if len(aLog.apikey) > 0 && aLog.elapse > time.Second*5 {
-			if url, err := aLog.Upload(); err != nil {
-				log.WithError(err).Error("Log failed to upload")
-			} else {
-				log.WithField("url", url).Info("Log uploaded to URL")
-			}
-
-		}
-	}(aLog.logChan, aLog.quit)
 	return aLog
 }
 
-func (aLog *ASCIICastLog) writeLog(f frame) {
+func (aLog *ASCIICastLog) WriteLog(f frame) error {
+	aLog.lock.Lock()
+	defer aLog.lock.Unlock()
 	diff := f.Time.Sub(aLog.createTime)
 	file, err := os.OpenFile(aLog.fileName, os.O_APPEND|os.O_WRONLY, 0666)
+	defer file.Close()
 	if err != nil {
 		log.WithField("path", aLog.fileName).WithError(err).Error("Log write error")
-		return
+		return err
 	}
 	if escStr, err := json.Marshal(string(f.Input)); err == nil {
 		file.Write([]byte(fmt.Sprintf("[%f, \"%v\", %v]\r\n", diff.Seconds(), f.Type, string(escStr))))
 	} else {
 		log.WithField("path", aLog.fileName).WithError(err).Errorf("Cannot parse error string: %v", string(f.Input))
+		return err
 	}
-	file.Close()
-}
-
-func (aLog *ASCIICastLog) Read(p []byte) (n int, err error) {
-	n, err = aLog.readWriter.Read(p)
-	defer func(b []byte) {
-		if len(b) > 0 {
-			aLog.logChan <- frame{
-				Type:  input,
-				Input: b[:n],
-			}
-		}
-	}(p)
-	return
-}
-
-func (aLog *ASCIICastLog) Write(p []byte) (int, error) {
-	defer func(b []byte) {
-		if len(b) > 0 {
-			aLog.logChan <- frame{
-				Type:  output,
-				Input: b,
-			}
-		}
-	}(p)
-	return aLog.readWriter.Write(p)
+	return nil
 }
 
 // Upload the written file to asciinema server
 func (aLog *ASCIICastLog) Upload() (string, error) {
 	file, err := os.Open(aLog.fileName)
+	defer file.Close()
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
 	buf := &bytes.Buffer{}
 	writer := multipart.NewWriter(buf)
 	filePart, err := writer.CreateFormFile("asciicast", "ascii.cast")
@@ -182,9 +132,17 @@ func (aLog *ASCIICastLog) Upload() (string, error) {
 }
 
 // Close the STDOut keystroke channel for logging
-func (aLog *ASCIICastLog) Close() {
+func (aLog *ASCIICastLog) Close() error {
 	log.Debug("ASCIICastLog.Close() called")
-	close(aLog.logChan)
-	close(aLog.quit)
 	aLog.elapse = time.Since(aLog.createTime)
+	// Upload cast to asciinema.org if key is filled and elapsed time > 5 seconds
+	if len(aLog.apikey) > 0 && aLog.elapse > time.Second*5 {
+		url, err := aLog.Upload()
+		if err != nil {
+			log.WithError(err).Error("Log failed to upload")
+			return err
+		}
+		log.WithField("url", url).Info("Log uploaded to URL")
+	}
+	return nil
 }
