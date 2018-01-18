@@ -20,6 +20,7 @@ var (
 	zipFile   string
 	dir       string
 	stripData bool
+	skip      string
 )
 
 func (z zeroSizefileInfo) Sys() interface{}   { return z.fi.Sys() }
@@ -33,6 +34,7 @@ func init() {
 	flag.StringVar(&zipFile, "o", "", "Output zip file")
 	flag.StringVar(&dir, "p", "", "Starting position for the import path")
 	flag.BoolVar(&stripData, "b", true, "Strip file content, if set to true the program will only read metadata from filesystem and skip actual file content in archive.")
+	flag.StringVar(&skip, "k", "", "Paths to be skipped for indexing, separated by semicolons")
 
 }
 
@@ -58,6 +60,10 @@ func main() {
 		fmt.Println("Missing parameter -o. See -help")
 		return
 	}
+	skipPath := []string{}
+	if len(skip) > 0 {
+		skipPath = strings.Split(skip, ";")
+	}
 	f, err := os.OpenFile(zipFile, os.O_CREATE|os.O_WRONLY, os.ModeExclusive)
 	if err != nil {
 		if os.IsExist(err) {
@@ -75,10 +81,19 @@ func main() {
 		if path == dir {
 			return nil
 		}
+		for _, v := range skipPath {
+			if strings.HasPrefix(path, v) {
+				return nil
+			}
+		}
+		if info == nil {
+			fmt.Printf("Skipping %v for nil FileInfo\n", path)
+			return nil
+		}
 		fmt.Printf("Writing %v (%v)\n", path, info.Name())
 		if err != nil {
 			fmt.Println(err)
-			return err
+			return nil
 		}
 		if stripData && !info.IsDir() {
 			info = zeroSizefileInfo{fi: info}

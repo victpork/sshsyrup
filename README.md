@@ -40,9 +40,9 @@ go build -ldflags "-s -w" -o createfs ./cmd/createfs
 ```
 * Prepare the virtual filesystem image by downloading the filesystem.zip from master branch or create your own by running
 ```
-sudo ./createfs -p / -o filesystem.zip
+./createfs -p / -o filesystem.zip
 ```
-Since we'll need to read every file from the directory, elevated privilege is required. Don't worry, no actual file content is included
+Since we'll need to read every file from the directory, it will take some time to load.
 
 * Generate SSH private key and renamed as id_rsa and put it in the same directory
 ```
