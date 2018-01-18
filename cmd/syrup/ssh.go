@@ -42,6 +42,13 @@ type winChgRequest struct {
 	Height uint32
 }
 
+type tunnelRequest struct {
+	RemoteHost string
+	RemotePort uint32
+	LocalHost  string
+	LocalPort  uint32
+}
+
 // NewSSHSession create new SSH connection based on existing socket connection
 func NewSSHSession(nConn net.Conn, sshConfig *ssh.ServerConfig) (*SSHSession, error) {
 	conn, chans, reqs, err := ssh.NewServerConn(nConn, sshConfig)
@@ -189,17 +196,27 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 func (s *SSHSession) handleNewConn() {
 	// Service the incoming Channel channel.
 	for newChannel := range s.sshChan {
-		// Channels have a type, depending on the application level
-		// protocol intended. In the case of a shell, the type is
-		// "session" and ServerShell may be used to present a simple
-		// terminal interface.
 		s.log.WithField("chanType", newChannel.ChannelType()).Info("User created new session channel")
-		if newChannel.ChannelType() != "session" {
+		switch newChannel.ChannelType() {
+		case "direct-tcpip", "forwarded-tcpip":
+			var treq tunnelRequest
+			err := ssh.Unmarshal(newChannel.ExtraData(), &treq)
+			if err != nil {
+				s.log.WithError(err).Error("Cannot unmarshal port forwarding data")
+				newChannel.Reject(ssh.UnknownChannelType, "Corrupt payload")
+			}
+			s.log.WithFields(log.Fields{
+				"remoteHost": fmt.Sprintf("%v:%v", treq.RemoteHost, treq.RemotePort),
+				"localHost":  fmt.Sprintf("%v:%v", treq.LocalHost, treq.LocalPort),
+				"chanType":   newChannel.ChannelType(),
+			}).Info("Trying to establish connection with port forwarding")
+			newChannel.Reject(ssh.Prohibited, "Port forwarding disabled")
+		case "session":
+			go s.handleNewSession(newChannel)
+		default:
 			newChannel.Reject(ssh.UnknownChannelType, "unknown channel type")
 			s.log.WithField("chanType", newChannel.ChannelType()).Infof("Unknown channel type %v", newChannel.ChannelType())
 			continue
-		} else {
-			go s.handleNewSession(newChannel)
 		}
 	}
 }
