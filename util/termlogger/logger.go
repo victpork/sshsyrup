@@ -20,6 +20,8 @@ func NewLogger(logHook LogHook, ds io.ReadWriter) io.ReadWriteCloser {
 		keylog:     log.New(),
 		hook:       logHook,
 	}
+	tl.keylog.SetLevel(log.InfoLevel)
+	tl.keylog.Out = DummyWriter{}
 	tl.keylog.AddHook(logHook)
 	return tl
 }
