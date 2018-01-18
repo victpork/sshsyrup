@@ -9,7 +9,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
-	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -25,18 +24,15 @@ type asciiCast struct {
 	Env       map[string]string `json:"env"`
 }
 
-// ASCIICastLog is the logger object for storing logging settings
-type ASCIICastLog struct {
+type AsciinemaHook struct {
 	data        asciiCast
 	fileName    string
 	createTime  time.Time
-	logChan     chan frame
 	userName    string
 	apikey      string
 	apiEndpoint string
 	elapse      time.Duration
 	htClient    *http.Client
-	lock        sync.Mutex
 }
 
 const (
@@ -45,8 +41,8 @@ const (
 	output               = "o"
 )
 
-// NewACastLogger creates a new ASCIICast logger
-func NewACastLogger(width, height int, apiEndPt, apiKey string, params map[string]string) Formatter {
+// NewAsciinemaHook creates a new Asciinema hook
+func NewAsciinemaHook(width, height int, apiEndPt, apiKey string, params map[string]string) (LogHook, error) {
 	now := time.Now()
 	header := asciiCast{
 		Version:   2,
@@ -62,7 +58,7 @@ func NewACastLogger(width, height int, apiEndPt, apiKey string, params map[strin
 	for k, v := range params {
 		header.Env[k] = v
 	}
-	aLog := &ASCIICastLog{
+	aLog := &AsciinemaHook{
 		data:        header,
 		createTime:  now,
 		apikey:      apiKey,
@@ -78,38 +74,34 @@ func NewACastLogger(width, height int, apiEndPt, apiKey string, params map[strin
 	b, err := json.Marshal(aLog.data)
 	if err != nil {
 		log.WithField("data", aLog.data).WithError(err).Errorf("Error when marshalling log data")
-		return nil
+		return nil, err
 	}
 	b = append(b, '\r', '\n')
 	if err = ioutil.WriteFile(aLog.fileName, b, 0600); err != nil {
 		log.WithField("path", aLog.fileName).WithError(err).Errorf("Error when writing log file")
-		return nil
+		return nil, err
 	}
 
-	return aLog
+	return aLog, nil
 }
 
-func (aLog *ASCIICastLog) WriteLog(f frame) error {
-	aLog.lock.Lock()
-	defer aLog.lock.Unlock()
-	diff := f.Time.Sub(aLog.createTime)
+func (aLog *AsciinemaHook) Fire(entry *log.Entry) error {
 	file, err := os.OpenFile(aLog.fileName, os.O_APPEND|os.O_WRONLY, 0666)
 	defer file.Close()
 	if err != nil {
-		log.WithField("path", aLog.fileName).WithError(err).Error("Log write error")
 		return err
 	}
-	if escStr, err := json.Marshal(string(f.Input)); err == nil {
-		file.Write([]byte(fmt.Sprintf("[%f, \"%v\", %v]\r\n", diff.Seconds(), f.Type, string(escStr))))
+	diff := entry.Time.Sub(aLog.createTime)
+	if escStr, err := json.Marshal(entry.Message); err == nil {
+		file.WriteString(fmt.Sprintf("[%f, \"%v\", %v]\r\n", diff.Seconds(), entry.Data["dir"], string(escStr)))
 	} else {
-		log.WithField("path", aLog.fileName).WithError(err).Errorf("Cannot parse error string: %v", string(f.Input))
 		return err
 	}
 	return nil
 }
 
 // Upload the written file to asciinema server
-func (aLog *ASCIICastLog) Upload() (string, error) {
+func (aLog *AsciinemaHook) upload() (string, error) {
 	file, err := os.Open(aLog.fileName)
 	defer file.Close()
 	if err != nil {
@@ -132,12 +124,12 @@ func (aLog *ASCIICastLog) Upload() (string, error) {
 }
 
 // Close the STDOut keystroke channel for logging
-func (aLog *ASCIICastLog) Close() error {
+func (aLog *AsciinemaHook) Close() error {
 	log.Debug("ASCIICastLog.Close() called")
 	aLog.elapse = time.Since(aLog.createTime)
 	// Upload cast to asciinema.org if key is filled and elapsed time > 5 seconds
 	if len(aLog.apikey) > 0 && aLog.elapse > time.Second*5 {
-		url, err := aLog.Upload()
+		url, err := aLog.upload()
 		if err != nil {
 			log.WithError(err).Error("Log failed to upload")
 			return err
@@ -145,4 +137,8 @@ func (aLog *ASCIICastLog) Close() error {
 		log.WithField("url", url).Info("Log uploaded to URL")
 	}
 	return nil
+}
+
+func (aLog *AsciinemaHook) Levels() []log.Level {
+	return log.AllLevels
 }

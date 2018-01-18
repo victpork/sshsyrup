@@ -2,9 +2,10 @@ package termlogger
 
 import (
 	"encoding/binary"
-	"io"
 	"os"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // umlLogHeader is the data header for UML compatible log
@@ -18,11 +19,10 @@ type umlLogHeader struct {
 }
 
 // UmlLog is the instance for storing logging information, like io
-type UmlLog struct {
-	tty     uint32
-	name    string
-	stdout  chan []byte
-	logChan chan frame
+type UMLHook struct {
+	tty    uint32
+	name   string
+	stdout chan []byte
 }
 
 // TTYDirection specifies the direction of data
@@ -41,15 +41,15 @@ const (
 	TTYWrite TTYDirection = 2
 )
 
-// NewUMLLogger creates a new logger instance and will create the UML log file
-func NewUMLLogger(ttyID uint32, logFile string, readWriter io.ReadWriter) Formatter {
+// NewUMLHook creates a new logrus hook instance and will create the UML log file
+func NewUMLHook(ttyID uint32, logFile string) (LogHook, error) {
 	file, err := os.OpenFile(logFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0666)
 	defer file.Close()
 	if err != nil {
-		panic("Cannot create log file")
+		return nil, err
 	}
 
-	t := &UmlLog{
+	t := &UMLHook{
 		tty:    ttyID,
 		name:   logFile,
 		stdout: make(chan []byte, 100),
@@ -65,20 +65,20 @@ func NewUMLLogger(ttyID uint32, logFile string, readWriter io.ReadWriter) Format
 	}
 	err = binary.Write(file, binary.LittleEndian, header)
 	if err != nil {
-		panic("Could not write to log file")
+		return nil, err
 	}
-	return t
+	return t, nil
 }
 
-func (uLog *UmlLog) WriteLog(f frame) error {
+func (uLog *UMLHook) Fire(entry *log.Entry) error {
 	file, err := os.OpenFile(uLog.name, os.O_APPEND|os.O_WRONLY, 0666)
 	defer file.Close()
 	if err != nil {
 		return err
 	}
-	size := len(f.Input)
+	size := len([]byte(entry.Message))
 	var ttyDir TTYDirection
-	if f.Type == "i" {
+	if entry.Data["dir"] == "i" {
 		ttyDir = TTYRead
 	} else {
 		ttyDir = TTYWrite
@@ -88,14 +88,14 @@ func (uLog *UmlLog) WriteLog(f frame) error {
 		tty:  uLog.tty,
 		len:  int32(size),
 		dir:  ttyDir,
-		sec:  uint32(f.Time.Unix()),     //For compatibility, works till 2038
-		usec: uint32(f.Time.UnixNano()), //For compatibility, works till 2038
+		sec:  uint32(entry.Time.Unix()),     //For compatibility, works till 2038
+		usec: uint32(entry.Time.UnixNano()), //For compatibility, works till 2038
 	}
 	err = binary.Write(file, binary.LittleEndian, header)
 	if err != nil {
 		return err
 	}
-	_, err = file.Write(f.Input)
+	_, err = file.Write([]byte(entry.Message))
 	if err != nil {
 		return err
 	}
@@ -103,7 +103,7 @@ func (uLog *UmlLog) WriteLog(f frame) error {
 }
 
 // Close closes the log file for writing UML logs
-func (uLog UmlLog) Close() error {
+func (uLog *UMLHook) Close() error {
 	now := time.Now()
 	file, _ := os.OpenFile(uLog.name, os.O_APPEND|os.O_WRONLY, 0666)
 	defer file.Close()
@@ -117,4 +117,8 @@ func (uLog UmlLog) Close() error {
 	}
 	binary.Write(file, binary.LittleEndian, header)
 	return nil
+}
+
+func (uLog *UMLHook) Levels() []log.Level {
+	return log.AllLevels
 }

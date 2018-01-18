@@ -2,64 +2,39 @@ package termlogger
 
 import (
 	"io"
-	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
-// TermLogger logs terminal keystrokes
-type TermLogger struct {
-	logChan    chan frame
-	formatter  Formatter
-	quit       chan struct{}
+// ioLogWrapper logs terminal keystrokes
+type ioLogWrapper struct {
 	dataStream io.ReadWriter
+	keylog     *log.Logger
+	hook       LogHook
 }
 
 // NewLogger creates a Logger instance
-func NewLogger(formatter Formatter, ds io.ReadWriter) (tl *TermLogger) {
-	tl = &TermLogger{
-		logChan:    make(chan frame, 10),
-		quit:       make(chan struct{}),
+func NewLogger(logHook LogHook, ds io.ReadWriter) io.ReadWriteCloser {
+	tl := &ioLogWrapper{
 		dataStream: ds,
-		formatter:  formatter,
+		keylog:     log.New(),
+		hook:       logHook,
 	}
-	go func(fChan <-chan frame, quit <-chan struct{}) {
-		defer tl.formatter.Close()
-		for {
-			select {
-			case f := <-fChan:
-				if len(f.Input) > 0 {
-					tl.formatter.WriteLog(f)
-				}
-			case <-quit:
-				return
-			}
-		}
-
-	}(tl.logChan, tl.quit)
-	return
+	tl.keylog.AddHook(logHook)
+	return tl
 }
 
-func (tl *TermLogger) Read(p []byte) (n int, err error) {
+func (tl *ioLogWrapper) Read(p []byte) (n int, err error) {
 	n, err = tl.dataStream.Read(p)
-	defer tl.formatter.WriteLog(frame{
-		Time:  time.Now(),
-		Type:  input,
-		Input: p[:n],
-	})
+	defer tl.keylog.WithField("dir", input).Info(string(p[:n]))
 	return
 }
 
-func (tl *TermLogger) Write(p []byte) (int, error) {
-	defer tl.formatter.WriteLog(frame{
-		Time:  time.Now(),
-		Type:  output,
-		Input: p,
-	})
+func (tl *ioLogWrapper) Write(p []byte) (int, error) {
+	defer tl.keylog.WithField("dir", output).Info(string(p))
 	return tl.dataStream.Write(p)
 }
 
-// Close signals the channel and the channel listener (formatter)
-// that the session ends and is going to close
-func (tl *TermLogger) Close() {
-	close(tl.logChan)
-	close(tl.quit)
+func (tl *ioLogWrapper) Close() error {
+	return tl.hook.Close()
 }

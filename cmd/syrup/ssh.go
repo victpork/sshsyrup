@@ -127,13 +127,23 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 						}
 					}
 					// The need of a goroutine here is that PuTTY will wait for reply before acknowledge it enters shell mode
-					asciiLogParams := map[string]string{
-						"TERM": s.ptyReq.Term,
-						"USER": s.user,
-						"SRC":  s.src.String(),
+					var hook termlogger.LogHook
+					if config.SessionLogFmt == "asciinema" {
+						asciiLogParams := map[string]string{
+							"TERM": s.ptyReq.Term,
+							"USER": s.user,
+							"SRC":  s.src.String(),
+						}
+						hook, err = termlogger.NewAsciinemaHook(80, 56,
+							config.AcinemaAPIEndPt, config.AcinemaAPIKey, asciiLogParams)
+
+					} else if config.SessionLogFmt == "uml" {
+						hook, err = termlogger.NewUMLHook(0, fmt.Sprintf("logs/sessions/%v-%v.ulm.log", s.user, time.Now().Format(logTimeFormat)))
 					}
-					tLog := termlogger.NewLogger(termlogger.NewACastLogger(80, 56,
-						config.AcinemaAPIEndPt, config.AcinemaAPIKey, asciiLogParams), channel)
+					if err != nil {
+						log.Error("Cannot create asciinema log file")
+					}
+					tLog := termlogger.NewLogger(hook, channel)
 					defer tLog.Close()
 					sh = os.NewShell(tLog, vfs, int(s.ptyReq.Width), int(s.ptyReq.Height), s.user, s.src.String(), s.log, quitSignal)
 					go sh.HandleRequest()
