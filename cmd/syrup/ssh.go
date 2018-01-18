@@ -134,14 +134,16 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 							"USER": s.user,
 							"SRC":  s.src.String(),
 						}
-						hook, err = termlogger.NewAsciinemaHook(80, 56,
+						hook, err = termlogger.NewAsciinemaHook(int(s.ptyReq.Width), int(s.ptyReq.Height),
 							config.AcinemaAPIEndPt, config.AcinemaAPIKey, asciiLogParams)
 
 					} else if config.SessionLogFmt == "uml" {
 						hook, err = termlogger.NewUMLHook(0, fmt.Sprintf("logs/sessions/%v-%v.ulm.log", s.user, time.Now().Format(logTimeFormat)))
+					} else {
+						log.Errorf("Session Log option %v not recognized", config.SessionLogFmt)
 					}
 					if err != nil {
-						log.Error("Cannot create asciinema log file")
+						log.Errorf("Cannot create %v log file", config.SessionLogFmt)
 					}
 					tLog := termlogger.NewLogger(hook, channel)
 					defer tLog.Close()
