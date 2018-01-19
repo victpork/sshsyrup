@@ -1,63 +1,56 @@
-package shell
+package os
 
 import (
 	"fmt"
 	"io"
-	"os"
+	realos "os"
 	pathlib "path"
 	"strings"
-
-	"github.com/mkishere/sshsyrup/util/termlogger"
 
 	"github.com/mkishere/sshsyrup/virtualfs"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh/terminal"
 )
 
-type Shell struct {
-	cwd        string
-	fs         *virtualfs.VirtualFS
-	funcMap    map[string]Command
-	envVars    map[string]string
-	iostream   io.ReadWriter
-	log        *log.Entry
-	sessionLog *termlogger.Logger
-	width      int
-	height     int
-	termSignal chan<- int
-}
+var (
+	funcMap = make(map[string]Command)
+)
 
-type Command interface {
-	Exec([]string) int
+type Shell struct {
+	log        *log.Entry
+	termSignal chan<- int
+	terminal   *terminal.Terminal
+	sys        *System
 }
 
 func NewShell(iostream io.ReadWriter, fsys *virtualfs.VirtualFS, width, height int, user, ipSrc string, log *log.Entry, termSignal chan<- int) *Shell {
-	fMap := make(map[string]Command)
+	sys := &System{
+		io:      iostream,
+		FSys:    fsys,
+		cwd:     "/home/" + user,
+		envVars: map[string]string{},
+		Width:   width,
+		Height:  height,
+	}
 	return &Shell{
-		iostream:   iostream,
-		cwd:        "/home/" + user,
-		fs:         fsys,
-		funcMap:    fMap,
-		width:      width,
-		height:     height,
 		log:        log,
 		termSignal: termSignal,
+		sys:        sys,
 	}
 }
 
-func (sh *Shell) HandleRequest(tLog termlogger.Logger) {
-	t := terminal.NewTerminal(sh.iostream, "> ")
-	/* tLog := termlogger.NewACastLogger(sh.width, sh.height,
-	config.AcinemaAPIEndPt, config.AcinemaAPIKey, sh.iostream, asciiLogParams) */
-	defer tLog.Close()
+func (sh *Shell) HandleRequest() {
+	sh.terminal = terminal.NewTerminal(sh.sys.IOStream(), "$ ")
 cmdLoop:
 	for {
-		cmd, err := t.ReadLine()
+		cmd, err := sh.terminal.ReadLine()
 		sh.log.WithField("cmd", cmd).Infof("User input command %v", cmd)
 		switch {
 		case err != nil:
 			if err.Error() == "EOF" {
 				sh.log.Info("EOF received from client")
+				sh.termSignal <- 0
+				return
 			} else {
 				sh.log.WithError(err).Error("Error when reading terminal")
 			}
@@ -68,25 +61,18 @@ cmdLoop:
 			sh.log.Infof("User logged out")
 			sh.termSignal <- 0
 			return
-		case strings.HasPrefix(cmd, "ls"):
-			args := strings.Split(strings.Trim(cmd, " "), " ")
-			var path string
-			if len(args) > 1 {
-				path = args[1]
-			} else {
-				path = sh.cwd
-			}
-			dirList, err := sh.fs.ReadDir(path)
-			if err != nil {
-				t.Write([]byte(fmt.Sprintf("ls: cannot access %v: No such file or directory\n", path)))
-			}
-			for k := range dirList {
-				t.Write([]byte(k + "     "))
-			}
+		case strings.HasPrefix(cmd, "export"):
+
 		default:
+			// Start parsing script
+
 			args := strings.SplitN(cmd, " ", 2)
-			//sh.Exec(args[0], args[1:])
-			t.Write([]byte(fmt.Sprintf("%v: command not found\n", args[0])))
+			n, err := sh.Exec(args[0], args[1:])
+			if err != nil {
+				sh.terminal.Write([]byte(fmt.Sprintf("%v: command not found\n", args[0])))
+			} else {
+				sh.sys.envVars["?"] = string(n)
+			}
 		}
 	}
 }
@@ -94,7 +80,7 @@ cmdLoop:
 func (sh *Shell) input(line string) error {
 	switch {
 	case strings.HasPrefix(line, "cd "):
-		err := sh.chdir(line[3:])
+		err := sh.sys.Chdir(line[3:])
 		if err != nil {
 			return err
 		}
@@ -102,31 +88,24 @@ func (sh *Shell) input(line string) error {
 	return nil
 }
 
-func (sh *Shell) getcwd() string {
-	return sh.cwd
-}
-
-func (sh *Shell) chdir(path string) error {
-	if !pathlib.IsAbs(path) {
-		path = sh.cwd + "/" + path
-	}
-	if !sh.fs.IsExist(path) {
-		return os.ErrNotExist
-	}
-	sh.cwd = path
-	return nil
-}
-
-func (sh *Shell) Exec(path string, args []string) (io.ReadWriter, error) {
+func (sh *Shell) Exec(path string, args []string) (int, error) {
 	cmd := pathlib.Base(path)
-	if execFunc, ok := sh.funcMap[cmd]; ok {
-		execFunc.Exec(args)
-	} else {
-
+	if execFunc, ok := funcMap[cmd]; ok {
+		res := execFunc.Exec(args, sh.sys)
+		return res, nil
 	}
-	return nil, nil
+
+	return -1, realos.ErrNotExist
 }
 
-func (sh *Shell) SetSize(width, height int) {
+func (sh *Shell) SetSize(width, height int) error {
+	sh.sys.Width = width
+	sh.sys.Height = height
+	return sh.terminal.SetSize(width, height)
+}
 
+// RegisterCommand puts the command implementation into map so
+// it can be invoked from command line
+func RegisterCommand(name string, cmd Command) {
+	funcMap[name] = cmd
 }

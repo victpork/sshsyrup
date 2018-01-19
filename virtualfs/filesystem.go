@@ -38,8 +38,8 @@ type VirtualFS struct {
 // Node are for describing the filesystem object
 type Node struct {
 	FileMode os.FileMode
-	Uid      string
-	Gid      string
+	Uid      int
+	Gid      int
 	modTime  time.Time
 	size     int64
 	Children map[string]*Node
@@ -56,11 +56,11 @@ type File struct {
 // NewFS initalized the tree, which creates the root directory
 func NewFS() *VirtualFS {
 	return &VirtualFS{
-		root: createNode("root", "root", os.ModeType),
+		root: createNode(0, 0, os.ModeType),
 	}
 }
 
-func createNode(uid, gid string, mode os.FileMode) (n *Node) {
+func createNode(uid, gid int, mode os.FileMode) (n *Node) {
 	n = &Node{
 		FileMode: mode,
 		Uid:      uid,
@@ -81,7 +81,7 @@ func (t *VirtualFS) IsExist(path string) bool {
 }
 
 // Mkdir creates a new directory according to the path argument passed in
-func (t *VirtualFS) Mkdir(path, uid, gid string, mode os.FileMode) error {
+func (t *VirtualFS) Mkdir(path string, uid, gid int, mode os.FileMode) error {
 	if strings.HasSuffix(path, "/") {
 		path = strings.TrimSuffix(path, "/")
 	}
@@ -141,7 +141,7 @@ func (t *VirtualFS) ReadDir(path string) (map[string]*Node, error) {
 	return roChildMap, nil
 }
 
-func (t *VirtualFS) Mkfile(path, uid, gid string, mode os.FileMode, contentReader *io.ReadCloser) error {
+func (t *VirtualFS) Mkfile(path string, uid, gid int, mode os.FileMode, contentReader *io.ReadCloser) error {
 	dirName, fileName := pathlib.Split(path)
 	t.lock.Lock()
 	defer t.lock.Unlock()
@@ -161,7 +161,7 @@ func (t *VirtualFS) Mkfile(path, uid, gid string, mode os.FileMode, contentReade
 	return nil
 }
 
-func (t *VirtualFS) MkFileWithFileInfo(path, uid, gid string, fileInfo os.FileInfo, contentReader *io.ReadCloser) error {
+func (t *VirtualFS) MkFileWithFileInfo(path string, uid, gid int, fileInfo os.FileInfo, contentReader *io.ReadCloser) error {
 	dirName, fileName := pathlib.Split(path)
 	if fileName != fileInfo.Name() {
 		return errors.New("Differentname")
@@ -195,7 +195,7 @@ func (t *VirtualFS) OpenFile(path string, flag int, mode os.FileMode) error {
 	return nil
 }
 
-func (t *VirtualFS) CopyFile(dst, src, uid, gid string) error {
+func (t *VirtualFS) CopyFile(dst, src string, uid, gid int) error {
 	node, err := t.fetchNode(src)
 	if err != nil {
 		return err
@@ -212,7 +212,7 @@ func (t *VirtualFS) CopyFile(dst, src, uid, gid string) error {
 	return nil
 }
 
-func (t *VirtualFS) MoveFile(dst, src, uid, gid string) error {
+func (t *VirtualFS) MoveFile(dst, src string, uid, gid int) error {
 	err := t.CopyFile(dst, src, uid, gid)
 	if err != nil {
 		return err

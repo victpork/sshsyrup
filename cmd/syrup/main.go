@@ -15,6 +15,7 @@ import (
 
 	"github.com/imdario/mergo"
 	colorable "github.com/mattn/go-colorable"
+	_ "github.com/mkishere/sshsyrup/os/command"
 	"github.com/mkishere/sshsyrup/virtualfs"
 	"github.com/mkishere/sshsyrup/virtualfs/zip"
 	"github.com/rifflock/lfshook"
@@ -32,6 +33,7 @@ type Config struct {
 	SvrMaxConn      int               `json:"server.maxConnections"`
 	SvrUserList     map[string]string `json:"server.userList"`
 	SvrTimeout      time.Duration     `json:"server.Timeout"`
+	SessionLogFmt   string            `json:"server.sessionLogFmt"`
 	VFSImgFile      string            `json:"virtualfs.imageFile"`
 	VFSUIDMapFile   string            `json:"virtualfs.uidMappingFile"`
 	VFSGIDMapFile   string            `json:"virtualfs.gidMappingFile"`
@@ -58,6 +60,7 @@ var (
 			"testuser": "tiger",
 		},
 		SvrTimeout:      time.Duration(time.Minute * 10),
+		SessionLogFmt:   "asciinema",
 		VFSImgFile:      "filesystem.zip",
 		VFSUIDMapFile:   "passwd",
 		VFSGIDMapFile:   "group",

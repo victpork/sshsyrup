@@ -19,7 +19,7 @@ func TestCreateFSFromZip(t *testing.T) {
 		t.Error("Error reading directory")
 	}
 	if ls, ex := dir["ls"]; ex {
-		if ls.Uid != "root" || ls.Gid != "root" {
+		if ls.Uid != 0 || ls.Gid != 0 {
 			t.Error("UID/GID incorrect")
 		}
 	} else {

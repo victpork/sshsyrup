@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math/bits"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,6 +21,13 @@ var (
 	zipFile   string
 	dir       string
 	stripData bool
+	skip      string
+)
+
+const (
+	MTIME = 1
+	ATIME = 2
+	CTIME = 4
 )
 
 func (z zeroSizefileInfo) Sys() interface{}   { return z.fi.Sys() }
@@ -33,10 +41,11 @@ func init() {
 	flag.StringVar(&zipFile, "o", "", "Output zip file")
 	flag.StringVar(&dir, "p", "", "Starting position for the import path")
 	flag.BoolVar(&stripData, "b", true, "Strip file content, if set to true the program will only read metadata from filesystem and skip actual file content in archive.")
+	flag.StringVar(&skip, "k", "", "Paths to be skipped for indexing, separated by semicolons")
 
 }
 
-func writeExtraUnixInfo(uid, gid uint32) (b []byte) {
+func writeExtraUnixInfo(uid, gid uint32, atime, mtime, ctime int64) (b []byte) {
 	b = make([]byte, 15)
 	binary.LittleEndian.PutUint16(b, 0x7875)
 	binary.LittleEndian.PutUint16(b[2:], 11)
@@ -45,6 +54,38 @@ func writeExtraUnixInfo(uid, gid uint32) (b []byte) {
 	binary.LittleEndian.PutUint32(b[6:], uid)
 	b[10] = 4
 	binary.LittleEndian.PutUint32(b[11:], gid)
+	var flag uint
+	if mtime != 0 {
+		flag |= MTIME
+	}
+	if atime != 0 {
+		flag |= ATIME
+	}
+	if ctime != 0 {
+		flag |= CTIME
+	}
+	if flag > 0 {
+		bLen := bits.OnesCount(flag) * 4
+		tb := make([]byte, bLen+5)
+		binary.LittleEndian.PutUint16(tb, 0x5455)
+		binary.LittleEndian.PutUint16(tb[2:], uint16(bLen+1))
+		tb[4] = byte(flag)
+		pos := 5
+		// For compatibility we are going to use uint32 instead of uint64.
+		// To be fixed in 2038 :)
+		if flag&MTIME != 0 {
+			binary.LittleEndian.PutUint32(tb[pos:], uint32(mtime))
+			pos += 4
+		}
+		if flag&ATIME != 0 {
+			binary.LittleEndian.PutUint32(tb[pos:], uint32(atime))
+			pos += 4
+		}
+		if flag&CTIME != 0 {
+			binary.LittleEndian.PutUint32(tb[pos:], uint32(ctime))
+		}
+		b = append(b, tb...)
+	}
 	return
 }
 
@@ -57,6 +98,10 @@ func main() {
 	if len(zipFile) == 0 {
 		fmt.Println("Missing parameter -o. See -help")
 		return
+	}
+	skipPath := []string{}
+	if len(skip) > 0 {
+		skipPath = strings.Split(skip, ";")
 	}
 	f, err := os.OpenFile(zipFile, os.O_CREATE|os.O_WRONLY, os.ModeExclusive)
 	if err != nil {
@@ -75,10 +120,19 @@ func main() {
 		if path == dir {
 			return nil
 		}
+		for _, v := range skipPath {
+			if strings.HasPrefix(path, v) {
+				return nil
+			}
+		}
+		if info == nil {
+			fmt.Printf("Skipping %v for nil FileInfo\n", path)
+			return nil
+		}
 		fmt.Printf("Writing %v (%v)\n", path, info.Name())
 		if err != nil {
 			fmt.Println(err)
-			return err
+			return nil
 		}
 		if stripData && !info.IsDir() {
 			info = zeroSizefileInfo{fi: info}
@@ -94,7 +148,7 @@ func main() {
 		}
 		if info.IsDir() {
 			header.Name += "/"
-		} else if info.Size() > 0 {
+		} else if info.Size() > 0 || info.Mode()&os.ModeSymlink != 0 {
 			header.Method = zip.Deflate
 		}
 
@@ -105,8 +159,16 @@ func main() {
 			fmt.Println(err)
 			return err
 		}
-
-		if !stripData {
+		if info.Mode()&os.ModeSymlink != 0 {
+			dst, err := os.Readlink(path)
+			if err != nil {
+				return err
+			}
+			_, err = w.Write([]byte(dst))
+			if err != nil {
+				return err
+			}
+		} else if !stripData {
 			file, err := os.Open(path)
 			if err != nil {
 				fmt.Println(err)

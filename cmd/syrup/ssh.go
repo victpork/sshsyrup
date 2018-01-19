@@ -42,6 +42,13 @@ type winChgRequest struct {
 	Height uint32
 }
 
+type tunnelRequest struct {
+	RemoteHost string
+	RemotePort uint32
+	LocalHost  string
+	LocalPort  uint32
+}
+
 // NewSSHSession create new SSH connection based on existing socket connection
 func NewSSHSession(nConn net.Conn, sshConfig *ssh.ServerConfig) (*SSHSession, error) {
 	conn, chans, reqs, err := ssh.NewServerConn(nConn, sshConfig)
@@ -86,7 +93,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 	}
 	var sh *os.Shell
 	go func(in <-chan *ssh.Request, channel ssh.Channel) {
-		quitSignal := make(chan int)
+		quitSignal := make(chan int, 1)
 		for {
 			select {
 			case req := <-in:
@@ -127,15 +134,28 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 						}
 					}
 					// The need of a goroutine here is that PuTTY will wait for reply before acknowledge it enters shell mode
-					asciiLogParams := map[string]string{
-						"TERM": s.ptyReq.Term,
-						"USER": s.user,
-						"SRC":  s.src.String(),
+					var hook termlogger.LogHook
+					if config.SessionLogFmt == "asciinema" {
+						asciiLogParams := map[string]string{
+							"TERM": s.ptyReq.Term,
+							"USER": s.user,
+							"SRC":  s.src.String(),
+						}
+						hook, err = termlogger.NewAsciinemaHook(int(s.ptyReq.Width), int(s.ptyReq.Height),
+							config.AcinemaAPIEndPt, config.AcinemaAPIKey, asciiLogParams)
+
+					} else if config.SessionLogFmt == "uml" {
+						hook, err = termlogger.NewUMLHook(0, fmt.Sprintf("logs/sessions/%v-%v.ulm.log", s.user, time.Now().Format(logTimeFormat)))
+					} else {
+						log.Errorf("Session Log option %v not recognized", config.SessionLogFmt)
 					}
-					tLog := termlogger.NewACastLogger(80, 56,
-						config.AcinemaAPIEndPt, config.AcinemaAPIKey, channel, asciiLogParams)
+					if err != nil {
+						log.Errorf("Cannot create %v log file", config.SessionLogFmt)
+					}
+					tLog := termlogger.NewLogger(hook, channel)
+					defer tLog.Close()
 					sh = os.NewShell(tLog, vfs, int(s.ptyReq.Width), int(s.ptyReq.Height), s.user, s.src.String(), s.log, quitSignal)
-					go sh.HandleRequest(tLog)
+					go sh.HandleRequest()
 					req.Reply(true, nil)
 				case "subsystem":
 					subsys := string(req.Payload[4:])
@@ -176,17 +196,27 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 func (s *SSHSession) handleNewConn() {
 	// Service the incoming Channel channel.
 	for newChannel := range s.sshChan {
-		// Channels have a type, depending on the application level
-		// protocol intended. In the case of a shell, the type is
-		// "session" and ServerShell may be used to present a simple
-		// terminal interface.
 		s.log.WithField("chanType", newChannel.ChannelType()).Info("User created new session channel")
-		if newChannel.ChannelType() != "session" {
+		switch newChannel.ChannelType() {
+		case "direct-tcpip", "forwarded-tcpip":
+			var treq tunnelRequest
+			err := ssh.Unmarshal(newChannel.ExtraData(), &treq)
+			if err != nil {
+				s.log.WithError(err).Error("Cannot unmarshal port forwarding data")
+				newChannel.Reject(ssh.UnknownChannelType, "Corrupt payload")
+			}
+			s.log.WithFields(log.Fields{
+				"remoteHost": fmt.Sprintf("%v:%v", treq.RemoteHost, treq.RemotePort),
+				"localHost":  fmt.Sprintf("%v:%v", treq.LocalHost, treq.LocalPort),
+				"chanType":   newChannel.ChannelType(),
+			}).Info("Trying to establish connection with port forwarding")
+			newChannel.Reject(ssh.Prohibited, "Port forwarding disabled")
+		case "session":
+			go s.handleNewSession(newChannel)
+		default:
 			newChannel.Reject(ssh.UnknownChannelType, "unknown channel type")
 			s.log.WithField("chanType", newChannel.ChannelType()).Infof("Unknown channel type %v", newChannel.ChannelType())
 			continue
-		} else {
-			go s.handleNewSession(newChannel)
 		}
 	}
 }
