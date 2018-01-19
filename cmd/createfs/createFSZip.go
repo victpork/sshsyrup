@@ -109,7 +109,7 @@ func main() {
 		}
 		if info.IsDir() {
 			header.Name += "/"
-		} else if info.Size() > 0 {
+		} else if info.Size() > 0 || info.Mode()&os.ModeSymlink != 0 {
 			header.Method = zip.Deflate
 		}
 
