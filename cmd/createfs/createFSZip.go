@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math/bits"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,6 +24,12 @@ var (
 	skip      string
 )
 
+const (
+	MTIME = 1
+	ATIME = 2
+	CTIME = 4
+)
+
 func (z zeroSizefileInfo) Sys() interface{}   { return z.fi.Sys() }
 func (z zeroSizefileInfo) Size() int64        { return 0 }
 func (z zeroSizefileInfo) IsDir() bool        { return z.fi.IsDir() }
@@ -38,7 +45,7 @@ func init() {
 
 }
 
-func writeExtraUnixInfo(uid, gid uint32) (b []byte) {
+func writeExtraUnixInfo(uid, gid uint32, atime, mtime, ctime int64) (b []byte) {
 	b = make([]byte, 15)
 	binary.LittleEndian.PutUint16(b, 0x7875)
 	binary.LittleEndian.PutUint16(b[2:], 11)
@@ -47,6 +54,38 @@ func writeExtraUnixInfo(uid, gid uint32) (b []byte) {
 	binary.LittleEndian.PutUint32(b[6:], uid)
 	b[10] = 4
 	binary.LittleEndian.PutUint32(b[11:], gid)
+	var flag uint
+	if mtime != 0 {
+		flag |= MTIME
+	}
+	if atime != 0 {
+		flag |= ATIME
+	}
+	if ctime != 0 {
+		flag |= CTIME
+	}
+	if flag > 0 {
+		bLen := bits.OnesCount(flag) * 4
+		tb := make([]byte, bLen+5)
+		binary.LittleEndian.PutUint16(tb, 0x5455)
+		binary.LittleEndian.PutUint16(tb[2:], uint16(bLen+1))
+		tb[4] = byte(flag)
+		pos := 5
+		// For compatibility we are going to use uint32 instead of uint64.
+		// To be fixed in 2038 :)
+		if flag&MTIME != 0 {
+			binary.LittleEndian.PutUint32(tb[pos:], uint32(mtime))
+			pos += 4
+		}
+		if flag&ATIME != 0 {
+			binary.LittleEndian.PutUint32(tb[pos:], uint32(atime))
+			pos += 4
+		}
+		if flag&CTIME != 0 {
+			binary.LittleEndian.PutUint32(tb[pos:], uint32(ctime))
+		}
+		b = append(b, tb...)
+	}
 	return
 }
 
