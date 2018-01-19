@@ -12,7 +12,7 @@ A SSH honeypot with rich features written in Go
 
 ### Requirements
 - Linux, Mac or Windows (I've only tested in Windows and WSL, suppose the other 2 platforms should work as expected)
-- Go 1.8/1.9 (For building)
+- Go 1.9 or up (For building)
 
 ### Download
 You may find the pre-build packages for various platform on the [release](https://github.com/mkishere/sshsyrup/releases) tab. If you find the platform you need is not on the list, you can follow the building procedure in the next section.
@@ -43,6 +43,8 @@ go build -ldflags "-s -w" -o createfs ./cmd/createfs
 ./createfs -p / -o filesystem.zip
 ```
 Since we'll need to read every file from the directory, it will take some time to load.
+
+    For Windows: Since there are no user/group information, the file/directory owner will always be root.
 
 * Generate SSH private key and renamed as id_rsa and put it in the same directory
 ```
