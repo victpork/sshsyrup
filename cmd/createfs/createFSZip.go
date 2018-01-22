@@ -144,7 +144,7 @@ func main() {
 		fmt.Printf("Filename to be written:%v\n", header.Name)
 		if err != nil {
 			fmt.Println(err)
-			return err
+			return nil
 		}
 		if info.IsDir() {
 			header.Name += "/"
@@ -157,27 +157,27 @@ func main() {
 
 		if err != nil {
 			fmt.Println(err)
-			return err
+			return nil
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
 			dst, err := os.Readlink(path)
 			if err != nil {
-				return err
+				return nil
 			}
 			_, err = w.Write([]byte(dst))
 			if err != nil {
-				return err
+				return nil
 			}
 		} else if !stripData {
 			file, err := os.Open(path)
 			if err != nil {
 				fmt.Println(err)
-				return err
+				return nil
 			}
 			defer file.Close()
 			_, err = io.Copy(w, file)
 			fmt.Println(err)
-			return err
+			return nil
 		}
 
 		return nil
