@@ -45,6 +45,7 @@ cmdLoop:
 	for {
 		cmd, err := sh.terminal.ReadLine()
 		sh.log.WithField("cmd", cmd).Infof("User input command %v", cmd)
+		cmd = strings.TrimSpace(cmd)
 		switch {
 		case err != nil:
 			if err.Error() == "EOF" {
@@ -61,6 +62,14 @@ cmdLoop:
 			sh.log.Infof("User logged out")
 			sh.termSignal <- 0
 			return
+		case strings.HasPrefix(cmd, "cd"):
+			args := strings.Split(cmd, " ")
+			if len(args) > 1 {
+				err := sh.sys.Chdir(args[1])
+				if err != nil {
+					sh.terminal.Write([]byte(fmt.Sprintf("-bash: cd: %v: No such file or directory\n", args[1])))
+				}
+			}
 		case strings.HasPrefix(cmd, "export"):
 
 		default:
