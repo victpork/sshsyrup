@@ -38,6 +38,7 @@ type Config struct {
 	VFSUIDMapFile   string            `json:"virtualfs.uidMappingFile"`
 	VFSGIDMapFile   string            `json:"virtualfs.gidMappingFile"`
 	VFSReadOnly     bool              `json:"virtualfs.readOnly"`
+	VFSTempDir      string            `json:"virtualfs.SavedFileDir"`
 	VFSWriteToImage bool              `json:"virtualfs.writeToImage"`
 	AcinemaAPIEndPt string            `json:"asciinema.apiEndpoint"`
 	AcinemaAPIKey   string            `json:"asciinema.apiKey"`
@@ -64,6 +65,7 @@ var (
 		VFSImgFile:      "filesystem.zip",
 		VFSUIDMapFile:   "passwd",
 		VFSGIDMapFile:   "group",
+		VFSTempDir:      "tempdir",
 		AcinemaAPIEndPt: "https://asciinema.org",
 	}
 	vfs afero.Fs
@@ -88,7 +90,7 @@ func init() {
 	var err error
 	// ID Mapping
 	//uidMap, gidMap := loadIDMapping(config.VFSUIDMapFile), loadIDMapping(config.VFSGIDMapFile)
-	backupFS := afero.NewBasePathFs(afero.NewOsFs(), "temppat")
+	backupFS := afero.NewBasePathFs(afero.NewOsFs(), config.VFSTempDir)
 	zipfs, err := virtualfs.NewVirtualFS(config.VFSImgFile)
 	if err != nil {
 		log.Error("Cannot create virtual filesystem")
