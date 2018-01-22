@@ -6,7 +6,7 @@ import (
 	"os"
 	pathlib "path"
 
-	"github.com/mkishere/sshsyrup/virtualfs"
+	"github.com/spf13/afero"
 )
 
 var (
@@ -25,7 +25,7 @@ type Command interface {
 // System emulates what most of os/sys does in the honeyport
 type System struct {
 	cwd           string
-	FSys          *virtualfs.VirtualFS
+	FSys          afero.Fs
 	io            io.ReadWriter
 	envVars       map[string]string
 	Width, Height int
@@ -35,7 +35,7 @@ type stdoutWrapper struct {
 	out io.Writer
 }
 
-func NewSystem(user string, fs *virtualfs.VirtualFS, io io.ReadWriter) *System {
+func NewSystem(user string, fs afero.Fs, io io.ReadWriter) *System {
 
 	return &System{
 		cwd:  "/home/" + user,
@@ -53,8 +53,10 @@ func (sys *System) Chdir(path string) error {
 	if !pathlib.IsAbs(path) {
 		path = sys.cwd + "/" + path
 	}
-	if !sys.FSys.IsExist(path) {
+	if exists, err := afero.DirExists(sys.FSys, path); err == nil && !exists {
 		return os.ErrNotExist
+	} else if err != nil {
+		return err
 	}
 	sys.cwd = path
 	return nil

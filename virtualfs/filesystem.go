@@ -1,114 +1,106 @@
 package virtualfs
 
 import (
+	"archive/zip"
 	"bytes"
-	"errors"
 	"io"
 	"os"
 	pathlib "path"
+	"path/filepath"
 	"strings"
-	"sync"
 	"time"
-)
 
-const (
-	TypeFile = iota
-	TypeDir
-	TypeLink
-)
-
-type Permission uint8
-
-const (
-	READ    = 1
-	WRITE   = 2
-	EXECUTE = 4
-)
-
-var (
-	FileNotFound     = errors.New("File not found")
-	NodeAlreadyExist = errors.New("Node with same name already exists")
+	"github.com/spf13/afero"
 )
 
 type VirtualFS struct {
-	root *Node
-	lock sync.RWMutex
+	root *File
 }
 
-// Node are for describing the filesystem object
-type Node struct {
-	FileMode os.FileMode
-	Uid      int
-	Gid      int
-	modTime  time.Time
-	size     int64
-	Children map[string]*Node
-	reader   *io.ReadCloser
-	writer   *io.WriteCloser
-	Pointer  *Node
-}
+type rootInfo struct{}
 
-type File struct {
-	fd  uint
-	buf bytes.Buffer
-}
+func (rootInfo) Name() string       { return string(filepath.Separator) }
+func (rootInfo) Size() int64        { return 0 }
+func (rootInfo) Mode() os.FileMode  { return os.ModeDir | os.ModePerm }
+func (rootInfo) ModTime() time.Time { return time.Now() }
+func (rootInfo) IsDir() bool        { return true }
+func (rootInfo) Sys() interface{}   { return nil }
 
-// NewFS initalized the tree, which creates the root directory
-func NewFS() *VirtualFS {
-	return &VirtualFS{
-		root: createNode(0, 0, os.ModeType),
-	}
-}
-
-func createNode(uid, gid int, mode os.FileMode) (n *Node) {
-	n = &Node{
-		FileMode: mode,
-		Uid:      uid,
-		Gid:      gid,
-	}
-	if mode&os.ModeDir != 0 {
-		n.Children = make(map[string]*Node)
-	}
-	return
-}
-
-func (t *VirtualFS) IsExist(path string) bool {
-	_, err := t.fetchNode(path)
+// NewVirtualFS initalized the tree, which creates the root directory
+func NewVirtualFS(zipFile string) (afero.Fs, error) {
+	r, err := zip.OpenReader(zipFile)
 	if err != nil {
-		return false
+		return nil, err
 	}
-	return true
+	defer r.Close()
+	vfs := &VirtualFS{
+		root: &File{
+			FileInfo: rootInfo{},
+			children: make(map[string]*File),
+		},
+	}
+	for _, f := range r.File {
+		vfs.createNode(f)
+	}
+	return vfs, nil
 }
 
-// Mkdir creates a new directory according to the path argument passed in
-func (t *VirtualFS) Mkdir(path string, uid, gid int, mode os.FileMode) error {
-	if strings.HasSuffix(path, "/") {
-		path = strings.TrimSuffix(path, "/")
-	}
-	parent, newDir := pathlib.Split(path)
+func (t *VirtualFS) Name() string {
+	return "zipFS"
+}
 
-	cwd, err := t.fetchNode(parent)
+func (t *VirtualFS) createNode(f *zip.File) error {
+	n := &File{
+		zipFile:  f,
+		FileInfo: FileInfo{FileInfo: f.FileInfo()},
+	}
+	if n.Mode()&os.ModeDir != 0 {
+		n.children = make(map[string]*File)
+	} else if n.Mode()&os.ModeSymlink != 0 {
+		rd, err := f.Open()
+		if err != nil {
+			return err
+		}
+		buf := bytes.NewBuffer(nil)
+		io.Copy(buf, rd)
+		n.SymLink = buf.String()
+		rd.Close()
+	}
+	dir, nodeName := pathlib.Split("/" + strings.TrimSuffix(f.Name, "/"))
+	var parent *File
+	var err error
+	parent, err = t.fetchNode(dir, false)
 	if err != nil {
 		return err
 	}
-	if cwd.FileMode&os.ModeDir == 0 {
-		return os.ErrInvalid
-	}
-	if _, exists := cwd.Children[newDir]; exists {
-		return os.ErrExist
-	}
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	newNode := createNode(uid, gid, cwd.FileMode)
-	newNode.modTime = time.Now()
-	newNode.size = 4096
-	cwd.Children[newDir] = newNode
-	newNode.Children["."] = newNode
-	newNode.Children[".."] = cwd
+	parent.children[nodeName] = n
+
 	return nil
 }
 
-func (t *VirtualFS) fetchNode(path string) (*Node, error) {
+// Mkdir creates a new directory according to the path argument passed in
+func (t *VirtualFS) Mkdir(path string, mode os.FileMode) error {
+	return os.ErrPermission
+}
+
+// MkdirAll creates a new directory according to the path argument passed in
+func (t *VirtualFS) MkdirAll(path string, mode os.FileMode) error {
+	return os.ErrPermission
+}
+
+func (t *VirtualFS) Remove(path string) error {
+	return os.ErrPermission
+}
+
+func (t *VirtualFS) RemoveAll(path string) error {
+	return os.ErrPermission
+}
+
+func (t *VirtualFS) Rename(new, old string) error {
+	return os.ErrPermission
+}
+
+func (t *VirtualFS) fetchNode(path string, followSymLink bool) (*File, error) {
 	path = pathlib.Clean(path)
 	cwd := t.root
 
@@ -116,141 +108,55 @@ func (t *VirtualFS) fetchNode(path string) (*Node, error) {
 		return t.root, nil
 	}
 	dirs := strings.Split(path, "/")
-	for _, nodeName := range dirs {
-		if len(nodeName) == 0 {
-			continue
+	for _, nodeName := range dirs[1:] {
+		if cwd.Mode()&os.ModeSymlink != 0 && followSymLink {
+			var err error
+			cwd, err = t.fetchNode(cwd.SymLink, true)
+			if err != nil {
+				return nil, err
+			}
 		}
-		node, nodeExists := cwd.Children[nodeName]
+		node, nodeExists := cwd.children[nodeName]
 		if !nodeExists {
-			return nil, FileNotFound
+			return nil, os.ErrNotExist
 		}
 		cwd = node
 	}
 	return cwd, nil
 }
 
-func (t *VirtualFS) ReadDir(path string) (map[string]*Node, error) {
-	dir, err := t.fetchNode(path)
+func (t *VirtualFS) Create(path string) (afero.File, error) {
+	return nil, os.ErrPermission
+}
+
+func (t *VirtualFS) Open(path string) (afero.File, error) {
+	n, err := t.fetchNode(path, false)
 	if err != nil {
 		return nil, err
 	}
-	roChildMap := make(map[string]*Node)
-	for k, v := range dir.Children {
-		roChildMap[k] = v
-	}
-	return roChildMap, nil
+	return n, nil
 }
 
-func (t *VirtualFS) Mkfile(path string, uid, gid int, mode os.FileMode, contentReader *io.ReadCloser) error {
-	dirName, fileName := pathlib.Split(path)
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	dirNode, err := t.fetchNode(dirName)
+func (t *VirtualFS) OpenFile(path string, flag int, mode os.FileMode) (afero.File, error) {
+	node, err := t.fetchNode(path, true)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if _, exists := dirNode.Children[fileName]; exists {
-		return NodeAlreadyExist
-	}
-	newFile := createNode(uid, gid, mode)
-	newFile.reader = contentReader
-	newFile.modTime = time.Now()
-	newFile.size = 0
-	dirNode.Children[fileName] = newFile
-
-	return nil
-}
-
-func (t *VirtualFS) MkFileWithFileInfo(path string, uid, gid int, fileInfo os.FileInfo, contentReader *io.ReadCloser) error {
-	dirName, fileName := pathlib.Split(path)
-	if fileName != fileInfo.Name() {
-		return errors.New("Differentname")
-	}
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	dirNode, err := t.fetchNode(dirName)
-	if err != nil {
-		return err
-	}
-	if _, exists := dirNode.Children[fileName]; exists {
-		return NodeAlreadyExist
-	}
-	newFile := createNode(uid, gid, fileInfo.Mode())
-	newFile.reader = contentReader
-	newFile.modTime = fileInfo.ModTime()
-	newFile.size = fileInfo.Size()
-	dirNode.Children[fileName] = newFile
-
-	return nil
-}
-
-func (t *VirtualFS) OpenFile(path string, flag int, mode os.FileMode) error {
-	node, err := t.fetchNode(path)
-	if err != nil {
-		return err
-	}
-	if node.FileMode&os.ModeDir != 0 {
-		return os.ErrInvalid
-	}
-	return nil
-}
-
-func (t *VirtualFS) CopyFile(dst, src string, uid, gid int) error {
-	node, err := t.fetchNode(src)
-	if err != nil {
-		return err
-	}
-	parentPath, child := pathlib.Split(dst)
-	parentNode, err := t.fetchNode(parentPath)
-	if err != nil {
-		return err
-	}
-	if _, exists := parentNode.Children[child]; exists {
-		return errors.New("Target already exists")
-	}
-	parentNode.Children[child] = createNode(uid, gid, node.FileMode)
-	return nil
-}
-
-func (t *VirtualFS) MoveFile(dst, src string, uid, gid int) error {
-	err := t.CopyFile(dst, src, uid, gid)
-	if err != nil {
-		return err
-	}
-	err = t.DeleteNode(src)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (t *VirtualFS) DeleteNode(path string) error {
-	dirName, fileName := pathlib.Split(path)
-	dirNode, err := t.fetchNode(dirName)
-	if err != nil {
-		return err
-	}
-	if _, exists := dirNode.Children[fileName]; exists {
-		return FileNotFound
-	}
-	delete(dirNode.Children, fileName)
-	return nil
+	return node, nil
 }
 
 func (t *VirtualFS) Stat(path string) (os.FileInfo, error) {
-	dirName, fileName := pathlib.Split(path)
-	dirNode, err := t.fetchNode(dirName)
+	n, err := t.fetchNode(path, true)
 	if err != nil {
 		return nil, err
 	}
-	childNode, exists := dirNode.Children[fileName]
-	if !exists {
-		return nil, FileNotFound
-	}
-	return &FileInfo{
-		path: path,
-		n:    childNode,
-	}, nil
+	return n.FileInfo, nil
 }
 
-func (t *VirtualFS) Root() *Node { return t.root }
+func (t *VirtualFS) Chmod(path string, mode os.FileMode) error {
+	return os.ErrPermission
+}
+
+func (t *VirtualFS) Chtimes(path string, modTime, accTime time.Time) error {
+	return os.ErrPermission
+}

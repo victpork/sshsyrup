@@ -17,9 +17,9 @@ import (
 	colorable "github.com/mattn/go-colorable"
 	_ "github.com/mkishere/sshsyrup/os/command"
 	"github.com/mkishere/sshsyrup/virtualfs"
-	"github.com/mkishere/sshsyrup/virtualfs/zip"
 	"github.com/rifflock/lfshook"
 	log "github.com/sirupsen/logrus"
+	"github.com/spf13/afero"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -66,7 +66,7 @@ var (
 		VFSGIDMapFile:   "group",
 		AcinemaAPIEndPt: "https://asciinema.org",
 	}
-	vfs *virtualfs.VirtualFS
+	vfs afero.Fs
 )
 
 func init() {
@@ -87,11 +87,14 @@ func init() {
 	// Initalize VFS
 	var err error
 	// ID Mapping
-	uidMap, gidMap := loadIDMapping(config.VFSUIDMapFile), loadIDMapping(config.VFSGIDMapFile)
-	vfs, err = zip.CreateZipFS(config.VFSImgFile, uidMap, gidMap)
+	//uidMap, gidMap := loadIDMapping(config.VFSUIDMapFile), loadIDMapping(config.VFSGIDMapFile)
+	backupFS := afero.NewBasePathFs(afero.NewOsFs(), "temppat")
+	zipfs, err := virtualfs.NewVirtualFS(config.VFSImgFile)
 	if err != nil {
 		log.Error("Cannot create virtual filesystem")
 	}
+	vfs = afero.NewCopyOnWriteFs(zipfs, backupFS)
+
 }
 
 func main() {

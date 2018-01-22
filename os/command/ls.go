@@ -29,19 +29,22 @@ func (cmd ls) Exec(args []string, sys *os.System) int {
 	} else {
 		path = sys.Getcwd()
 	}
-	dirList, err := sys.FSys.ReadDir(path)
+	dir, err := sys.FSys.Open(path)
 	if err != nil {
 		fmt.Fprintf(sys.Out(), "ls: cannot access %v: No such file or directory\n", path)
 		return 1
 	}
 	// Sort directory list
-	dirName := make([]string, 0, len(dirList))
+	dirName, err := dir.Readdirnames(-1)
+	if err != nil {
+		fmt.Fprintf(sys.Out(), "ls: cannot access %v: No such file or directory\n", path)
+		return 1
+	}
 	maxlen := 0
-	for k := range dirList {
-		if len(k) > maxlen {
-			maxlen = len(k)
+	for _, d := range dirName {
+		if len(d) > maxlen {
+			maxlen = len(d)
 		}
-		dirName = append(dirName, k)
 	}
 	sort.Strings(dirName)
 

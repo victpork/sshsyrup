@@ -7,8 +7,8 @@ import (
 	pathlib "path"
 	"strings"
 
-	"github.com/mkishere/sshsyrup/virtualfs"
 	log "github.com/sirupsen/logrus"
+	"github.com/spf13/afero"
 	"golang.org/x/crypto/ssh/terminal"
 )
 
@@ -23,7 +23,7 @@ type Shell struct {
 	sys        *System
 }
 
-func NewShell(iostream io.ReadWriter, fsys *virtualfs.VirtualFS, width, height int, user, ipSrc string, log *log.Entry, termSignal chan<- int) *Shell {
+func NewShell(iostream io.ReadWriter, fsys afero.Fs, width, height int, user, ipSrc string, log *log.Entry, termSignal chan<- int) *Shell {
 	sys := &System{
 		io:      iostream,
 		FSys:    fsys,
