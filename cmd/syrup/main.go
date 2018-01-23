@@ -15,6 +15,7 @@ import (
 
 	"github.com/imdario/mergo"
 	colorable "github.com/mattn/go-colorable"
+	honeyos "github.com/mkishere/sshsyrup/os"
 	_ "github.com/mkishere/sshsyrup/os/command"
 	"github.com/mkishere/sshsyrup/virtualfs"
 	"github.com/rifflock/lfshook"
@@ -96,7 +97,14 @@ func init() {
 		log.Error("Cannot create virtual filesystem")
 	}
 	vfs = afero.NewCopyOnWriteFs(zipfs, backupFS)
-
+	err = honeyos.LoadUsers(config.VFSUIDMapFile)
+	if err != nil {
+		log.Errorf("Cannot load user mapping file %v", config.VFSUIDMapFile)
+	}
+	err = honeyos.LoadGroups(config.VFSGIDMapFile)
+	if err != nil {
+		log.Errorf("Cannot load group mapping file %v", config.VFSGIDMapFile)
+	}
 }
 
 func main() {
