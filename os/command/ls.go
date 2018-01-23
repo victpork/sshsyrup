@@ -51,10 +51,10 @@ func (cmd ls) Exec(args []string, sys *os.System) int {
 	itemPerRow := int(sys.Width / (maxlen + 1))
 
 	for i := 0; i < len(dirName); i++ {
-		fmt.Fprintf(sys.Out(), "%v%v  ", dirName[i], strings.Repeat(" ", maxlen-len(dirName[i])))
 		if (i+1)%itemPerRow == 0 {
 			fmt.Fprint(sys.Out(), "\n")
 		}
+		fmt.Fprintf(sys.Out(), "%v%v  ", dirName[i], strings.Repeat(" ", maxlen-len(dirName[i])))
 	}
 	fmt.Fprint(sys.Out(), "\n")
 	return 0
