@@ -27,10 +27,14 @@ func NewShell(iostream io.ReadWriter, fsys afero.Fs, width, height int, user, ip
 	sys := &System{
 		io:      iostream,
 		FSys:    fsys,
-		cwd:     "/home/" + user,
+		cwd:     usernameMapping[user].Homedir,
 		envVars: map[string]string{},
 		Width:   width,
 		Height:  height,
+	}
+	aferoFs := afero.Afero{Fs: fsys}
+	if exists, _ := aferoFs.DirExists(usernameMapping[user].Homedir); !exists {
+		aferoFs.MkdirAll(usernameMapping[user].Homedir, 0644)
 	}
 	return &Shell{
 		log:        log,
