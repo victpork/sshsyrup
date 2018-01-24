@@ -2,6 +2,7 @@ package os
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	pathlib "path"
@@ -100,4 +101,17 @@ func (sw stdoutWrapper) Write(buf []byte) (n int, err error) {
 	}
 
 	return n, nil
+}
+
+func (sys *System) Environ() (env []string) {
+	env = make([]string, 0, len(sys.envVars))
+	for k, v := range sys.envVars {
+		env = append(env, fmt.Sprintf("%v=%v", k, v))
+	}
+	return
+}
+
+func (sys *System) SetEnv(key, value string) error {
+	sys.envVars[key] = value
+	return nil
 }
