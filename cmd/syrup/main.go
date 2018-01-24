@@ -26,23 +26,22 @@ import (
 
 // Config type is a map for storing config values
 type Config struct {
-	SvrAddr         string            `json:"server.addr"`
-	SvrPort         int               `json:"server.port"`
-	SvrAllowRndUser bool              `json:"server.allowRandomUser"`
-	SvrVer          string            `json:"server.ident"`
-	SvrMaxTries     int               `json:"server.maxTries"`
-	SvrMaxConn      int               `json:"server.maxConnections"`
-	SvrUserList     map[string]string `json:"server.userList"`
-	SvrTimeout      time.Duration     `json:"server.Timeout"`
-	SessionLogFmt   string            `json:"server.sessionLogFmt"`
-	VFSImgFile      string            `json:"virtualfs.imageFile"`
-	VFSUIDMapFile   string            `json:"virtualfs.uidMappingFile"`
-	VFSGIDMapFile   string            `json:"virtualfs.gidMappingFile"`
-	VFSReadOnly     bool              `json:"virtualfs.readOnly"`
-	VFSTempDir      string            `json:"virtualfs.SavedFileDir"`
-	VFSWriteToImage bool              `json:"virtualfs.writeToImage"`
-	AcinemaAPIEndPt string            `json:"asciinema.apiEndpoint"`
-	AcinemaAPIKey   string            `json:"asciinema.apiKey"`
+	SvrAddr         string        `json:"server.addr"`
+	SvrPort         int           `json:"server.port"`
+	SvrAllowRndUser bool          `json:"server.allowRandomUser"`
+	SvrVer          string        `json:"server.ident"`
+	SvrMaxTries     int           `json:"server.maxTries"`
+	SvrMaxConn      int           `json:"server.maxConnections"`
+	SvrTimeout      time.Duration `json:"server.Timeout"`
+	SessionLogFmt   string        `json:"server.sessionLogFmt"`
+	VFSImgFile      string        `json:"virtualfs.imageFile"`
+	VFSUIDMapFile   string        `json:"virtualfs.uidMappingFile"`
+	VFSGIDMapFile   string        `json:"virtualfs.gidMappingFile"`
+	VFSReadOnly     bool          `json:"virtualfs.readOnly"`
+	VFSTempDir      string        `json:"virtualfs.SavedFileDir"`
+	VFSWriteToImage bool          `json:"virtualfs.writeToImage"`
+	AcinemaAPIEndPt string        `json:"asciinema.apiEndpoint"`
+	AcinemaAPIKey   string        `json:"asciinema.apiKey"`
 }
 
 const (
@@ -58,9 +57,6 @@ var (
 		SvrVer:          "SSH-2.0-OpenSSH_6.8p1 Ubuntu-2ubuntu2.8",
 		SvrMaxTries:     3,
 		SvrMaxConn:      10,
-		SvrUserList: map[string]string{
-			"testuser": "tiger",
-		},
 		SvrTimeout:      time.Duration(time.Minute * 10),
 		SessionLogFmt:   "asciinema",
 		VFSImgFile:      "filesystem.zip",
@@ -131,7 +127,8 @@ func main() {
 				"srcIP":    c.RemoteAddr().String(),
 				"password": string(pass),
 			}).Info("User trying to login with password")
-			if stpass, exists := config.SvrUserList[c.User()]; exists && (stpass == string(pass) || stpass == "*") || config.SvrAllowRndUser {
+
+			if stpass, exists := honeyos.IsUserExist(c.User()); exists && (stpass == string(pass) || stpass == "*") || config.SvrAllowRndUser {
 				return &ssh.Permissions{
 					Extensions: map[string]string{
 						"permit-agent-forwarding": "yes",

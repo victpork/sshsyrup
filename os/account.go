@@ -24,8 +24,9 @@ type Group struct {
 }
 
 var (
-	users  = make(map[int]User)
-	groups = make(map[int]Group)
+	users           = make(map[int]User)
+	usernameMapping = make(map[string]User)
+	groups          = make(map[int]Group)
 )
 
 func LoadUsers(userFile string) error {
@@ -45,7 +46,7 @@ func LoadUsers(userFile string) error {
 		if err != nil {
 			return err
 		}
-		users[uid] = User{
+		userObj := User{
 			UID:      uid,
 			GID:      gid,
 			Name:     fields[0],
@@ -54,6 +55,8 @@ func LoadUsers(userFile string) error {
 			Homedir:  fields[5],
 			Shell:    fields[6],
 		}
+		users[uid] = userObj
+		usernameMapping[fields[0]] = userObj
 	}
 
 	return nil
@@ -79,4 +82,12 @@ func LoadGroups(groupFile string) error {
 	}
 
 	return nil
+}
+
+func IsUserExist(user string) (pass string, exists bool) {
+	userObj, exists := usernameMapping[user]
+	if !exists {
+		return
+	}
+	return userObj.Password, exists
 }

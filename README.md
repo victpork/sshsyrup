@@ -17,9 +17,6 @@ A SSH honeypot with rich features written in Go
 ### Download
 You may find the pre-build packages for various platform on the [release](https://github.com/mkishere/sshsyrup/releases) tab. If you find the platform you need is not on the list, you can follow the building procedure in the next section.
 
-### Download
-You may find the pre-build packages for various platform on the [release](https://github.com/mkishere/sshsyrup/releases) tab. If you find the platform you need is not on the list, you can follow the building procedure in the next section.
-
 ### Building
 Run the following command in shell to get latest package and build it
 ```
@@ -35,10 +32,7 @@ go build -ldflags "-s -w" -o createfs ./cmd/createfs
 {
     "server.addr": "0.0.0.0",
     "server.port": 22,
-    "server.allowRandomUser": false,
-    "server.userList": {
-        "root": "*"
-    }
+    "server.allowRandomUser": false
 }
 ```
 * Prepare the virtual filesystem image by downloading the filesystem.zip from master branch or create your own by running
@@ -46,9 +40,9 @@ go build -ldflags "-s -w" -o createfs ./cmd/createfs
 ./createfs -p / -o filesystem.zip
 ```
 Since we'll need to read every file from the directory, it will take some time to load.
-
-    For Windows: Since there are no user/group information, the file/directory owner will always be root.
-
+_For Windows: Since there are no user/group information, the file/directory owner will always be root._
+* Prepare user and passwd file
+Put _passwd_ and _group_ file in the same directory as config.json. The format of both files are the same as their [real-life counterpart](http://www.linfo.org/etc_passwd.html) in _/etc_, except that passwd also stores the password in the second field of each line, and asterisk(*) in password field can be used to denote matching any password.
 * Generate SSH private key and renamed as id_rsa and put it in the same directory
 ```
 ssh-keygen -t rsa
