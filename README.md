@@ -4,8 +4,12 @@ A SSH honeypot with rich features written in Go
 
 ### Features
 - SSH self-defined accounts and passwords, also allow any logins
-- Records shell sessions and upload to [asciinema.org](https://asciinema.org) (Or, if you wish, can log as [UML-compatible](http://user-mode-linux.sourceforge.net/old/tty_logging.html) format)
+- Fake shell. Records shell sessions and upload to [asciinema.org](https://asciinema.org) (Or, if you wish, can log as [UML-compatible](http://user-mode-linux.sourceforge.net/old/tty_logging.html) format)
 - Virtual Filesystem for browsing and fooling intruder
+- Logs key signature to log
+- Log in JSON format for easy parsing
+- Record local and remote host when client attempt to create port redirection
+- Struture allows [extending command sets](https://github.com/mkishere/sshsyrup/wiki/Writing-new-commands) with ease
 
 ### See Recorded Session in Action!
 [![asciicast](https://asciinema.org/a/rgr1KyY1Xn21bXIDMKL9fkGD0.png)](https://asciinema.org/a/rgr1KyY1Xn21bXIDMKL9fkGD0)
@@ -40,7 +44,9 @@ go build -ldflags "-s -w" -o createfs ./cmd/createfs
 ./createfs -p / -o filesystem.zip
 ```
 Since we'll need to read every file from the directory, it will take some time to load.
-_For Windows: Since there are no user/group information, the file/directory owner will always be root._
+
+_For Windows, since there are no user/group information, the file/directory owner will always be root._
+
 * Prepare user and passwd file
 Put _passwd_ and _group_ file in the same directory as config.json. The format of both files are the same as their [real-life counterpart](http://www.linfo.org/etc_passwd.html) in _/etc_, except that passwd also stores the password in the second field of each line, and asterisk(*) in password field can be used to denote matching any password.
 * Generate SSH private key and renamed as id_rsa and put it in the same directory
@@ -59,7 +65,6 @@ server.port | Port number the honeypot will listen to. Default to _2222_
 server.allowRandomUser | Allow user to login with any user names. Default to _false_
 server.ident | Server identification string. Default to _SSH-2.0-OpenSSH_6.8p1_
 server.maxConnections | Max connections allowed simutaneously. Default to _10_
-server.userList | Contains a Map that has user name as key and password as value. Use asterisk '*' as password will allow any password to login to that account
 server.sessionLogFmt | Terminal session log format. Can be _asciinema_ or _uml_. Default _asciinema_
 asciinema.logfileprefix | Prefix to write asciinema compatible terminal replay files. Default to _test_
 asciinema.apiEndpoint | The service endpoint for the replay to upload. Default to _https://asciinema.org_
