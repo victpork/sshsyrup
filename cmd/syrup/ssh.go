@@ -8,6 +8,7 @@ import (
 	"time"
 
 	os "github.com/mkishere/sshsyrup/os"
+	"github.com/mkishere/sshsyrup/sftp"
 	"github.com/mkishere/sshsyrup/util/termlogger"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
@@ -97,6 +98,9 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 		for {
 			select {
 			case req := <-in:
+				if req == nil {
+					return
+				}
 				switch req.Type {
 				case "winadj@putty.projects.tartarus.org", "simple@putty.projects.tartarus.org":
 					//Do nothing here
@@ -163,7 +167,13 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 						"reqType":   req.Type,
 						"subSystem": subsys,
 					}).Infof("User requested subsystem %v", subsys)
-					req.Reply(true, nil)
+					if subsys == "sftp" {
+						sftpSrv := sftp.NewSftp(channel, vfs, s.user)
+						go sftpSrv.HandleRequest()
+						req.Reply(true, nil)
+					} else {
+						req.Reply(false, nil)
+					}
 				case "window-change":
 					s.log.WithField("reqType", req.Type).Info("User shell window size changed")
 					if sh != nil {
