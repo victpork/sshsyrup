@@ -100,3 +100,23 @@ func readVariableInt(field []byte) uint32 {
 	}
 	return 0
 }
+
+func (zInfo ZipExtraInfo) UID() int {
+	return zInfo.uid
+}
+
+func (zInfo ZipExtraInfo) GID() int {
+	return zInfo.gid
+}
+
+func (zInfo ZipExtraInfo) Atime() time.Time {
+	return zInfo.atime
+}
+
+func (zInfo ZipExtraInfo) Mtime() time.Time {
+	return zInfo.mtime
+}
+
+func (zInfo ZipExtraInfo) Ctime() time.Time {
+	return zInfo.ctime
+}
