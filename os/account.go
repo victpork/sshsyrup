@@ -91,3 +91,15 @@ func IsUserExist(user string) (pass string, exists bool) {
 	}
 	return userObj.Password, exists
 }
+
+func GetUser(name string) User {
+	return usernameMapping[name]
+}
+
+func GetUserByID(id int) User {
+	return users[id]
+}
+
+func GetGroupByID(id int) Group {
+	return groups[id]
+}
