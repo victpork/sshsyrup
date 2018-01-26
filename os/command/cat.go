@@ -1,7 +1,6 @@
 package command
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -21,15 +20,7 @@ func (c cat) GetHelp() string {
 
 func (c cat) Exec(args []string, sys *honeyos.System) int {
 	if len(args) == 0 {
-		buf := bufio.NewReader(sys.In())
-		for {
-			l, _, err := buf.ReadLine()
-			if err == io.EOF {
-				return 0
-			}
-			l = append(l, '\n')
-			sys.Out().Write(l)
-		}
+		return 0
 	}
 	f, err := sys.FSys.OpenFile(args[0], os.O_RDONLY, os.ModeType)
 	if err != nil {
