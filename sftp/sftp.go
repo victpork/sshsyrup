@@ -16,53 +16,16 @@ import (
 
 type sftpMsg struct {
 	Length  uint32
-	Type    ReqType
+	Type    PacketType
 	ReqID   uint32
 	Payload []byte
 }
-
-type ReqType byte
-
-const (
-	SSH_FXP_INIT = iota + 1
-	SSH_FXP_VERSION
-	SSH_FXP_OPEN
-	SSH_FXP_CLOSE
-	SSH_FXP_READ
-	SSH_FXP_WRITE
-	SSH_FXP_LSTAT
-	SSH_FXP_FSTAT
-	SSH_FXP_SETSTAT
-	SSH_FXP_FSETSTAT
-	SSH_FXP_OPENDIR
-	SSH_FXP_READDIR
-	SSH_FXP_REMOVE
-	SSH_FXP_MKDIR
-	SSH_FXP_RMDIR
-	SSH_FXP_REALPATH
-	SSH_FXP_STAT
-	SSH_FXP_RENAME
-	SSH_FXP_READLINK
-	SSH_FXP_LINK
-	SSH_FXP_BLOCK
-	SSH_FXP_UNBLOCK
-)
-const (
-	SSH_FXP_STATUS = iota + 101
-	SSH_FXP_HANDLE
-	SSH_FXP_DATA
-	SSH_FXP_NAME
-	SSH_FXP_ATTRS
-)
-const (
-	SSH_FXP_EXTENDED = iota + 201
-	SSH_FXP_EXTENDED_REPLY
-)
 
 type Sftp struct {
 	conn io.ReadWriter
 	vfs  afero.Afero
 	cwd  string
+	quit chan<- int
 }
 
 func (sftp *Sftp) GetRealPath(path string) string {
@@ -72,21 +35,27 @@ func (sftp *Sftp) GetRealPath(path string) string {
 	return pathlib.Clean(path)
 }
 
-func NewSftp(conn io.ReadWriter, vfs afero.Fs, user string) *Sftp {
+func NewSftp(conn io.ReadWriter, vfs afero.Fs, user string, quitSig chan<- int) *Sftp {
 	u := honeyos.GetUser(user)
 	fs := afero.Afero{vfs}
 	if exists, _ := fs.DirExists(u.Homedir); !exists {
 		fs.MkdirAll(u.Homedir, 0600)
 	}
-	return &Sftp{conn, fs, u.Homedir}
+	return &Sftp{conn, fs, u.Homedir, quitSig}
 }
 
 func (sftp *Sftp) HandleRequest() {
 	for {
 		req, err := readRequest(sftp.conn)
 		if err != nil {
+			if err == io.EOF {
+				defer func() { sftp.quit <- 0 }()
+			} else {
+				defer func() { sftp.quit <- 1 }()
+			}
 			break
 		}
+		log.Infof("Req Rcv'd: %v\nPayload: %v", req.Type, req.Payload)
 		switch req.Type {
 		case SSH_FXP_INIT:
 			sendReply(sftp.conn, createInit())
@@ -119,7 +88,7 @@ func (sftp *Sftp) HandleRequest() {
 
 func readRequest(r io.Reader) (sftpMsg, error) {
 	b := make([]byte, 4)
-	if _, err := io.ReadFull(r, b); err != nil {
+	if size, err := io.ReadFull(r, b); err != nil || size < 4 {
 		return sftpMsg{}, err
 	}
 	l := binary.BigEndian.Uint32(b)
@@ -127,12 +96,11 @@ func readRequest(r io.Reader) (sftpMsg, error) {
 	if _, err := io.ReadFull(r, b); err != nil {
 		return sftpMsg{}, err
 	}
-	log.Info(b)
 	rplyMsg := sftpMsg{
 		Length: l,
-		Type:   ReqType(b[0]),
+		Type:   PacketType(b[0]),
 	}
-	if b[0] == SSH_FXP_INIT {
+	if PacketType(b[0]) == SSH_FXP_INIT {
 		rplyMsg.Payload = b[1:]
 	} else {
 		rplyMsg.ReqID = binary.BigEndian.Uint32(b[1:])

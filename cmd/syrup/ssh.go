@@ -168,7 +168,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 						"subSystem": subsys,
 					}).Infof("User requested subsystem %v", subsys)
 					if subsys == "sftp" {
-						sftpSrv := sftp.NewSftp(channel, vfs, s.user)
+						sftpSrv := sftp.NewSftp(channel, vfs, s.user, quitSignal)
 						go sftpSrv.HandleRequest()
 						req.Reply(true, nil)
 					} else {

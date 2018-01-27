@@ -3,7 +3,6 @@ package sftp
 import (
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"os"
 	"time"
 
@@ -16,23 +15,52 @@ type fxp_realpath struct {
 
 type fxp_name []virtualfs.FileInfo
 
+type PacketType byte
+
 const (
-	SSH_FILEXFER_ATTR_SIZE              = 0x00000001
-	SSH_FILEXFER_ATTR_PERMISSIONS       = 0x00000004
-	SSH_FILEXFER_ATTR_ACCESSTIME        = 0x00000008
-	SSH_FILEXFER_ATTR_CREATETIME        = 0x00000010
-	SSH_FILEXFER_ATTR_MODIFYTIME        = 0x00000020
-	SSH_FILEXFER_ATTR_ACL               = 0x00000040
-	SSH_FILEXFER_ATTR_OWNERGROUP        = 0x00000080
-	SSH_FILEXFER_ATTR_SUBSECOND_TIMES   = 0x00000100
-	SSH_FILEXFER_ATTR_BITS              = 0x00000200
-	SSH_FILEXFER_ATTR_ALLOCATION_SIZE   = 0x00000400
-	SSH_FILEXFER_ATTR_TEXT_HINT         = 0x00000800
-	SSH_FILEXFER_ATTR_MIME_TYPE         = 0x00001000
-	SSH_FILEXFER_ATTR_LINK_COUNT        = 0x00002000
-	SSH_FILEXFER_ATTR_UNTRANSLATED_NAME = 0x00004000
-	SSH_FILEXFER_ATTR_CTIME             = 0x00008000
-	SSH_FILEXFER_ATTR_EXTENDED          = 0x80000000
+	SSH_FXP_INIT PacketType = iota + 1
+	SSH_FXP_VERSION
+	SSH_FXP_OPEN
+	SSH_FXP_CLOSE
+	SSH_FXP_READ
+	SSH_FXP_WRITE
+	SSH_FXP_LSTAT
+	SSH_FXP_FSTAT
+	SSH_FXP_SETSTAT
+	SSH_FXP_FSETSTAT
+	SSH_FXP_OPENDIR
+	SSH_FXP_READDIR
+	SSH_FXP_REMOVE
+	SSH_FXP_MKDIR
+	SSH_FXP_RMDIR
+	SSH_FXP_REALPATH
+	SSH_FXP_STAT
+	SSH_FXP_RENAME
+	SSH_FXP_READLINK
+	SSH_FXP_LINK
+	SSH_FXP_BLOCK
+	SSH_FXP_UNBLOCK
+)
+const (
+	SSH_FXP_STATUS PacketType = iota + 101
+	SSH_FXP_HANDLE
+	SSH_FXP_DATA
+	SSH_FXP_NAME
+	SSH_FXP_ATTRS
+)
+const (
+	SSH_FXP_EXTENDED PacketType = iota + 201
+	SSH_FXP_EXTENDED_REPLY
+)
+
+type AttrFlag uint32
+
+const (
+	SSH_FILEXFER_ATTR_SIZE AttrFlag = 1 << iota
+	SSH_FILEXFER_ATTR_UIDGID
+	SSH_FILEXFER_ATTR_PERMISSIONS
+	SSH_FILEXFER_ATTR_ACMODTIME
+	SSH_FILEXFER_ATTR_EXTENDED AttrFlag = 0x80000000
 )
 
 const (
@@ -48,8 +76,10 @@ const (
 	UNKNOWN_TEXT   = "Unknown error"         /* Others */
 )
 
+type StatusCode uint32
+
 const (
-	SSH_FX_OK = iota
+	SSH_FX_OK StatusCode = iota
 	SSH_FX_EOF
 	SSH_FX_NO_SUCH_FILE
 	SSH_FX_PERMISSION_DENIED
@@ -135,25 +165,20 @@ func fileAttrToByte(b []byte, fi os.FileInfo) {
 	// string   extended_data
 	// ...      more extended data (extended_type - extended_data pairs),
 	// 	   so that number of pairs equals extended_count
-	binary.BigEndian.PutUint32(b[4:], SSH_FILEXFER_ATTR_SIZE|
+	binary.BigEndian.PutUint32(b[4:], uint32(SSH_FILEXFER_ATTR_SIZE|
 		SSH_FILEXFER_ATTR_PERMISSIONS|
-		SSH_FILEXFER_ATTR_MODIFYTIME)
+		SSH_FILEXFER_ATTR_ACMODTIME))
 
 	if fi.IsDir() {
 		binary.BigEndian.PutUint64(b[8:], 4096)
 	} else {
 		binary.BigEndian.PutUint64(b[8:], uint64(fi.Size()))
 	}
-	fmt.Printf("After size: %v\n", b)
 	binary.BigEndian.PutUint32(b[16:], uint32(uid))
 	binary.BigEndian.PutUint32(b[20:], uint32(gid))
-	fmt.Printf("After UID/GID: %v\n", b)
 	binary.BigEndian.PutUint32(b[24:], uint32(fi.Mode()))
-	fmt.Printf("After Mode: %v\n", b)
 	binary.BigEndian.PutUint32(b[28:], uint32(atime.Unix()))
-	fmt.Printf("After Atime: %v\n", b)
 	binary.BigEndian.PutUint32(b[32:], uint32(mtime.Unix()))
-	fmt.Printf("After MTime: %v\n", b)
 }
 
 func createInit() sftpMsg {
@@ -182,15 +207,15 @@ func createNamePacket(names []string, fileInfo []os.FileInfo) ([]byte, error) {
 	for i := range names {
 		fileInfoB := make([]byte, len(names[i])*2+4+36+55)
 		strToByte(fileInfoB, names[i])
-		strToByte(fileInfoB, getLsString(fileInfo[i]))
-		fileAttrToByte(fileInfoB[4+len(names[i]):], fileInfo[i])
+		strToByte(fileInfoB[4+len(names[i]):], getLsString(fileInfo[i]))
+		fileAttrToByte(fileInfoB[4+len(names[i])*2+36:], fileInfo[i])
 		b = append(b, fileInfoB...)
 	}
 
 	return b, nil
 }
 
-func createStatusMsg(reqID, statusCode uint32) sftpMsg {
+func createStatusMsg(reqID uint32, statusCode StatusCode) sftpMsg {
 	stsMsgs := []string{
 		"Success",           /* SSH_FX_OK */
 		"End of file",       /* SSH_FX_EOF */
