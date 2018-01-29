@@ -9,7 +9,7 @@ A SSH honeypot with rich features written in Go
 - Logs key signature to log
 - Log in JSON format for easy parsing
 - Record local and remote host when client attempt to create port redirection
-- Struture allows [extending command sets](https://github.com/mkishere/sshsyrup/wiki/Writing-new-commands) with ease
+- Structure allows [extending command sets](https://github.com/mkishere/sshsyrup/wiki/Writing-new-commands) with ease
 
 ### See Recorded Session in Action!
 [![asciicast](https://asciinema.org/a/rgr1KyY1Xn21bXIDMKL9fkGD0.png)](https://asciinema.org/a/rgr1KyY1Xn21bXIDMKL9fkGD0)
