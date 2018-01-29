@@ -63,19 +63,6 @@ const (
 	SSH_FILEXFER_ATTR_EXTENDED AttrFlag = 0x80000000
 )
 
-const (
-	OK_TEXT        = "Success"               /* SSH_FX_OK */
-	EOF_TEXT       = "End of file"           /* SSH_FX_EOF */
-	NO_FILE_TEXT   = "No such file"          /* SSH_FX_NO_SUCH_FILE */
-	PERM_TEXT      = "Permission denied"     /* SSH_FX_PERMISSION_DENIED */
-	FAIL_TEXT      = "Failure"               /* SSH_FX_FAILURE */
-	BADMSG_TEXT    = "Bad message"           /* SSH_FX_BAD_MESSAGE */
-	NO_CONN_TEXT   = "No connection"         /* SSH_FX_NO_CONNECTION */
-	CONN_LOST_TEXT = "Connection lost"       /* SSH_FX_CONNECTION_LOST */
-	OP_UNSUP_TEXT  = "Operation unsupported" /* SSH_FX_OP_UNSUPPORTED */
-	UNKNOWN_TEXT   = "Unknown error"         /* Others */
-)
-
 type StatusCode uint32
 
 const (
@@ -88,29 +75,6 @@ const (
 	SSH_FX_NO_CONNECTION
 	SSH_FX_CONNECTION_LOST
 	SSH_FX_OP_UNSUPPORTED
-	SSH_FX_INVALID_HANDLE
-	SSH_FX_NO_SUCH_PATH
-	SSH_FX_FILE_ALREADY_EXISTS
-	SSH_FX_WRITE_PROTECT
-	SSH_FX_NO_MEDIA
-	SSH_FX_NO_SPACE_ON_FILESYSTEM
-	SSH_FX_QUOTA_EXCEEDED
-	SSH_FX_UNKNOWN_PRINCIPAL
-	SSH_FX_LOCK_CONFLICT
-	SSH_FX_DIR_NOT_EMPTY
-	SSH_FX_NOT_A_DIRECTORY
-	SSH_FX_INVALID_FILENAME
-	SSH_FX_LINK_LOOP
-	SSH_FX_CANNOT_DELETE
-	SSH_FX_INVALID_PARAMETER
-	SSH_FX_FILE_IS_A_DIRECTORY
-	SSH_FX_BYTE_RANGE_LOCK_CONFLICT
-	SSH_FX_BYTE_RANGE_LOCK_REFUSED
-	SSH_FX_DELETE_PENDING
-	SSH_FX_FILE_CORRUPT
-	SSH_FX_OWNER_INVALID
-	SSH_FX_GROUP_INVALID
-	SSH_FX_NO_MATCHING_BYTE_RANGE_LOCK
 )
 
 func ToByte(data interface{}) (b []byte) {
@@ -166,6 +130,7 @@ func fileAttrToByte(b []byte, fi os.FileInfo) {
 	// ...      more extended data (extended_type - extended_data pairs),
 	// 	   so that number of pairs equals extended_count
 	binary.BigEndian.PutUint32(b[4:], uint32(SSH_FILEXFER_ATTR_SIZE|
+		SSH_FILEXFER_ATTR_UIDGID|
 		SSH_FILEXFER_ATTR_PERMISSIONS|
 		SSH_FILEXFER_ATTR_ACMODTIME))
 
@@ -193,13 +158,17 @@ func createInit() sftpMsg {
 
 	return sftpMsg{
 		Type:    SSH_FXP_VERSION,
-		Length:  uint32(len(payload) + 1),
 		Payload: payload,
 	}
 }
 
 func createNamePacket(names []string, fileInfo []os.FileInfo) ([]byte, error) {
-	if len(names) != len(fileInfo) {
+	if names == nil {
+		names = make([]string, len(fileInfo))
+		for i, fi := range fileInfo {
+			names[i] = fi.Name()
+		}
+	} else if len(names) != len(fileInfo) {
 		return nil, errors.New("name and fileinfo does not match")
 	}
 	b := make([]byte, 4)
@@ -226,21 +195,15 @@ func createStatusMsg(reqID uint32, statusCode StatusCode) sftpMsg {
 		"No connection",     /* SSH_FX_NO_CONNECTION */
 		"Connection lost",   /* SSH_FX_CONNECTION_LOST */
 		"Operation unsupported",
-		"Unknown error",
 	}
-	var stsMsg string
-	if statusCode > 9 {
-		stsMsg = stsMsgs[9]
-	} else {
-		stsMsg = stsMsgs[statusCode]
-	}
-	strBuf := make([]byte, len(stsMsg)+4)
-	strToByte(strBuf, stsMsg)
+	stsMsg := stsMsgs[statusCode]
+	strBuf := make([]byte, len(stsMsg)+8)
+	binary.BigEndian.PutUint32(strBuf, uint32(statusCode))
+	strToByte(strBuf[4:], stsMsg)
 	msg := sftpMsg{
 		Type:    SSH_FXP_STATUS,
 		ReqID:   reqID,
 		Payload: strBuf,
-		Length:  uint32(len(strBuf) + 1),
 	}
 	return msg
 }
