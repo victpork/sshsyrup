@@ -26,6 +26,7 @@ Run the following command in shell to get latest package and build it
 ```
 go get -u github.com/mkishere/sshsyrup
 cd ~/go/src/github.com/mkishere/sshsyrup
+dep ensure
 go build -ldflags "-s -w" -o sshsyrup ./cmd/syrup
 go build -ldflags "-s -w" -o createfs ./cmd/createfs
 ```
