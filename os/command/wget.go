@@ -36,6 +36,10 @@ func (wg wget) Exec(args []string, sys *os.System) int {
 	flag.SetOutput(sys.Out())
 	err := flag.Parse(args)
 	f := flag.Args()
+	if len(args) == 0 {
+		fmt.Fprintln(sys.Out(), "wget: missing URL\nUsage: wget [OPTION]... [URL]...\n\nTry `wget --help' for more options.")
+		return 1
+	}
 	url := strings.TrimSpace(f[0])
 	if !strings.Contains(url, "://") {
 		url = "http://" + url
