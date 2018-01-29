@@ -226,8 +226,9 @@ func createSessionHandler(c <-chan net.Conn, sshConfig *ssh.ServerConfig) {
 		sshSession, err := NewSSHSession(conn, sshConfig)
 		if err != nil {
 			log.WithField("srcIP", conn.RemoteAddr().String()).WithError(err).Error("Error establishing SSH connection")
+		} else {
+			sshSession.handleNewConn()
 		}
-		sshSession.handleNewConn()
 		conn.Close()
 	}
 }
