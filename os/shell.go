@@ -45,6 +45,12 @@ func NewShell(iostream io.ReadWriter, fsys afero.Fs, width, height int, user, ip
 
 func (sh *Shell) HandleRequest() {
 	sh.terminal = terminal.NewTerminal(sh.sys.IOStream(), "$ ")
+	defer func() {
+		if r := recover(); r != nil {
+			sh.log.Errorf("Recovered from crash %v, killing connection", r)
+			sh.termSignal <- 1
+		}
+	}()
 cmdLoop:
 	for {
 		cmd, err := sh.terminal.ReadLine()
