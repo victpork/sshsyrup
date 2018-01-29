@@ -120,3 +120,18 @@ func (zInfo ZipExtraInfo) Mtime() time.Time {
 func (zInfo ZipExtraInfo) Ctime() time.Time {
 	return zInfo.ctime
 }
+
+func GetExtraInfo(fi os.FileInfo) (uid, gid int, aTime, mTime time.Time) {
+
+	switch p := fi.Sys().(type) {
+	case ZipExtraInfo:
+		uid = p.UID()
+		gid = p.GID()
+		aTime = p.Atime()
+		mTime = p.Mtime()
+	default:
+		uid = 0
+		gid = 0
+	}
+	return
+}
