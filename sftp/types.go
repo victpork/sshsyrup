@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"os"
+	"syscall"
 	"time"
 
 	"github.com/mkishere/sshsyrup/virtualfs"
@@ -141,7 +142,7 @@ func fileAttrToByte(b []byte, fi os.FileInfo) {
 	}
 	binary.BigEndian.PutUint32(b[16:], uint32(uid))
 	binary.BigEndian.PutUint32(b[20:], uint32(gid))
-	binary.BigEndian.PutUint32(b[24:], uint32(fi.Mode()))
+	binary.BigEndian.PutUint32(b[24:], fileModeToBit(fi.Mode()))
 	binary.BigEndian.PutUint32(b[28:], uint32(atime.Unix()))
 	binary.BigEndian.PutUint32(b[32:], uint32(mtime.Unix()))
 }
@@ -206,4 +207,46 @@ func createStatusMsg(reqID uint32, statusCode StatusCode) sftpMsg {
 		Payload: strBuf,
 	}
 	return msg
+}
+
+// fromFileMode converts from the os.FileMode specification to sftp filemode bits
+// Copied from https://github.com/pkg/sftp/
+func fileModeToBit(mode os.FileMode) uint32 {
+	ret := uint32(0)
+
+	if mode&os.ModeDevice != 0 {
+		if mode&os.ModeCharDevice != 0 {
+			ret |= syscall.S_IFCHR
+		} else {
+			ret |= syscall.S_IFBLK
+		}
+	}
+	if mode&os.ModeDir != 0 {
+		ret |= syscall.S_IFDIR
+	}
+	if mode&os.ModeSymlink != 0 {
+		ret |= syscall.S_IFLNK
+	}
+	if mode&os.ModeNamedPipe != 0 {
+		ret |= syscall.S_IFIFO
+	}
+	if mode&os.ModeSetgid != 0 {
+		ret |= syscall.S_ISGID
+	}
+	if mode&os.ModeSetuid != 0 {
+		ret |= syscall.S_ISUID
+	}
+	if mode&os.ModeSticky != 0 {
+		ret |= syscall.S_ISVTX
+	}
+	if mode&os.ModeSocket != 0 {
+		ret |= syscall.S_IFSOCK
+	}
+
+	if mode&os.ModeType == 0 {
+		ret |= syscall.S_IFREG
+	}
+	ret |= uint32(mode & os.ModePerm)
+
+	return ret
 }
