@@ -47,7 +47,7 @@ func (sh *Shell) HandleRequest() {
 	sh.terminal = terminal.NewTerminal(sh.sys.IOStream(), "$ ")
 	defer func() {
 		if r := recover(); r != nil {
-			sh.log.Errorf("Recovered from crash %v, killing connection", r)
+			sh.log.Errorf("Recovered from panic %v", r)
 			sh.termSignal <- 1
 		}
 	}()
@@ -110,6 +110,16 @@ func (sh *Shell) input(line string) error {
 func (sh *Shell) Exec(path string, args []string) (int, error) {
 	cmd := pathlib.Base(path)
 	if execFunc, ok := funcMap[cmd]; ok {
+		defer func() {
+			if r := recover(); r != nil {
+				sh.log.WithFields(log.Fields{
+					"cmd":   path,
+					"args": args,
+					"error": r,
+				}).Error("Command has crashed")
+				sh.terminal.Write([]byte("Segmentation fault\n"))
+			}
+		}()
 		res := execFunc.Exec(args, sh.sys)
 		return res, nil
 	}
