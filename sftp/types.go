@@ -5,7 +5,6 @@ import (
 	"errors"
 	"os"
 	"syscall"
-	"time"
 
 	"github.com/mkishere/sshsyrup/virtualfs"
 )
@@ -99,52 +98,26 @@ func byteToStr(b []byte) string {
 	return string(b[4:])
 }
 
+// fileAttrToByte writes a byte array of size 36 into b
 func fileAttrToByte(b []byte, fi os.FileInfo) {
-	var uid, gid uint32
-	var atime, mtime time.Time
-	switch realFInfo := fi.Sys().(type) {
-	case virtualfs.ZipExtraInfo:
-		uid = uint32(realFInfo.UID())
-		gid = uint32(realFInfo.GID())
-		atime = realFInfo.Atime()
-		mtime = realFInfo.Mtime()
-	default:
-		uid = 0
-		gid = 0
-		atime = time.Now()
-		mtime = time.Now()
-	}
-	_ = b[35]
-	b[3] = 32
-	// attributes variable struct, and also variable per protocol version
-	// spec version 3 attributes:
-	// uint32   flags
-	// uint64   size           present only if flag SSH_FILEXFER_ATTR_SIZE
-	// uint32   uid            present only if flag SSH_FILEXFER_ATTR_UIDGID
-	// uint32   gid            present only if flag SSH_FILEXFER_ATTR_UIDGID
-	// uint32   permissions    present only if flag SSH_FILEXFER_ATTR_PERMISSIONS
-	// uint32   atime          present only if flag SSH_FILEXFER_ACMODTIME
-	// uint32   mtime          present only if flag SSH_FILEXFER_ACMODTIME
-	// uint32   extended_count present only if flag SSH_FILEXFER_ATTR_EXTENDED
-	// string   extended_type
-	// string   extended_data
-	// ...      more extended data (extended_type - extended_data pairs),
-	// 	   so that number of pairs equals extended_count
-	binary.BigEndian.PutUint32(b[4:], uint32(SSH_FILEXFER_ATTR_SIZE|
+	uid, gid, atime, mtime := virtualfs.GetExtraInfo(fi)
+
+	_ = b[31]
+	binary.BigEndian.PutUint32(b, uint32(SSH_FILEXFER_ATTR_SIZE|
 		SSH_FILEXFER_ATTR_UIDGID|
 		SSH_FILEXFER_ATTR_PERMISSIONS|
 		SSH_FILEXFER_ATTR_ACMODTIME))
 
 	if fi.IsDir() {
-		binary.BigEndian.PutUint64(b[8:], 4096)
+		binary.BigEndian.PutUint64(b[4:], 4096)
 	} else {
-		binary.BigEndian.PutUint64(b[8:], uint64(fi.Size()))
+		binary.BigEndian.PutUint64(b[4:], uint64(fi.Size()))
 	}
-	binary.BigEndian.PutUint32(b[16:], uint32(uid))
-	binary.BigEndian.PutUint32(b[20:], uint32(gid))
-	binary.BigEndian.PutUint32(b[24:], fileModeToBit(fi.Mode()))
-	binary.BigEndian.PutUint32(b[28:], uint32(atime.Unix()))
-	binary.BigEndian.PutUint32(b[32:], uint32(mtime.Unix()))
+	binary.BigEndian.PutUint32(b[12:], uint32(uid))
+	binary.BigEndian.PutUint32(b[16:], uint32(gid))
+	binary.BigEndian.PutUint32(b[20:], fileModeToBit(fi.Mode()))
+	binary.BigEndian.PutUint32(b[24:], uint32(atime.Unix()))
+	binary.BigEndian.PutUint32(b[28:], uint32(mtime.Unix()))
 }
 
 func createInit() sftpMsg {
@@ -175,10 +148,17 @@ func createNamePacket(names []string, fileInfo []os.FileInfo) ([]byte, error) {
 	b := make([]byte, 4)
 	binary.BigEndian.PutUint32(b, uint32(len(names)))
 	for i := range names {
-		fileInfoB := make([]byte, len(names[i])*2+4+36+55)
+		// Shortname: len(name) + 4
+		// Longname: len(name) + 55 + 4
+		// FileInfo: 32
+		longName := getLsString(fileInfo[i])
+		fileInfoB := make([]byte, 8+len(names[i])+len(longName)+32)
 		strToByte(fileInfoB, names[i])
-		strToByte(fileInfoB[4+len(names[i]):], getLsString(fileInfo[i]))
-		fileAttrToByte(fileInfoB[4+len(names[i])*2+36:], fileInfo[i])
+		//fmt.Printf("After short:%v\n", fileInfoB)
+		strToByte(fileInfoB[4+len(names[i]):], longName)
+		//fmt.Printf("After long:%v\n", fileInfoB)
+		fileAttrToByte(fileInfoB[8+len(names[i])+len(longName):], fileInfo[i])
+		//fmt.Printf("After attr:%v\n", fileInfoB)
 		b = append(b, fileInfoB...)
 	}
 

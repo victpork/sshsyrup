@@ -30,7 +30,17 @@ type Sftp struct {
 	fileHandleMap map[int]afero.File
 	nextHandle    int
 	lock          sync.RWMutex
+	dirCache      map[int]*dirContent
 }
+
+type dirContent struct {
+	offset int
+	fi     []os.FileInfo
+}
+
+const (
+	entriesPerFetch = 120
+)
 
 func (sftp *Sftp) GetRealPath(path string) string {
 	if !pathlib.IsAbs(path) {
@@ -45,7 +55,7 @@ func NewSftp(conn io.ReadWriter, vfs afero.Fs, user string, quitSig chan<- int) 
 	if exists, _ := fs.DirExists(u.Homedir); !exists {
 		fs.MkdirAll(u.Homedir, 0600)
 	}
-	return &Sftp{conn, fs, u.Homedir, quitSig, map[int]afero.File{}, 0, sync.RWMutex{}}
+	return &Sftp{conn, fs, u.Homedir, quitSig, map[int]afero.File{}, 0, sync.RWMutex{}, map[int]*dirContent{}}
 }
 
 func (sftp *Sftp) HandleRequest() {
@@ -61,7 +71,7 @@ func (sftp *Sftp) HandleRequest() {
 			}
 			break
 		}
-		log.Infof("Req Rcv'd: %v\nPayload: %v", req.Type, req.Payload)
+		log.Infof("Req:%v Seq:%d Payload(Len:%v):%v", req.Type, req.ReqID, len(req.Payload), req.Payload)
 		switch req.Type {
 		case SSH_FXP_INIT:
 			sendReply(sftp.conn, createInit())
@@ -70,12 +80,12 @@ func (sftp *Sftp) HandleRequest() {
 			path = sftp.GetRealPath(path)
 			fi, err := sftp.vfs.Fs.Stat(path)
 			if err != nil {
-				sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_BAD_MESSAGE))
+				sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_NO_SUCH_FILE))
 				continue
 			} else {
 				b, err := createNamePacket([]string{path}, []os.FileInfo{fi})
 				if err != nil {
-					sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_BAD_MESSAGE))
+					sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_FAILURE))
 					continue
 				}
 				sendReply(sftp.conn, sftpMsg{
@@ -107,7 +117,12 @@ func (sftp *Sftp) HandleRequest() {
 			handle := byteToStr(req.Payload)
 			b, err := sftp.readDir(handle)
 			if err != nil {
-				sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_FAILURE))
+				if err == io.EOF {
+					sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_EOF))
+				} else {
+					sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_FAILURE))
+				}
+				continue
 			}
 			sendReply(sftp.conn, sftpMsg{
 				Type:    SSH_FXP_NAME,
@@ -119,8 +134,29 @@ func (sftp *Sftp) HandleRequest() {
 			err := sftp.close(handle)
 			if err != nil {
 				sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_FAILURE))
+				continue
 			}
 			sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_OK))
+		case SSH_FXP_LSTAT, SSH_FXP_STAT:
+			path := byteToStr(req.Payload)
+			if len(path) == 0 {
+				sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_BAD_MESSAGE))
+				continue
+			}
+			path = sftp.GetRealPath(path)
+			fi, err := sftp.vfs.Stat(path)
+			if err != nil {
+				sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_NO_SUCH_FILE))
+				continue
+			}
+			b := make([]byte, 32)
+			fmt.Println(fi.Mode())
+			fileAttrToByte(b, fi)
+			sendReply(sftp.conn, sftpMsg{
+				Type:    SSH_FXP_ATTRS,
+				ReqID:   req.ReqID,
+				Payload: b,
+			})
 		default:
 			sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_BAD_MESSAGE))
 		}
@@ -158,6 +194,7 @@ func (sftp *Sftp) close(hnd string) error {
 	}
 
 	delete(sftp.fileHandleMap, hndInt)
+	delete(sftp.dirCache, hndInt)
 
 	return nil
 }
@@ -172,11 +209,28 @@ func (sftp *Sftp) readDir(hnd string) ([]byte, error) {
 	if !exists {
 		return nil, os.ErrNotExist
 	}
-	fi, err := file.Readdir(-1)
-	if err != nil {
-		return nil, err
+	// TODO Do pagination here till afero officially supports it
+	if sftp.dirCache == nil {
+		sftp.dirCache = make(map[int]*dirContent)
 	}
-	return createNamePacket(nil, fi)
+	dir, exists := sftp.dirCache[hndInt]
+	if !exists {
+		fi, err := file.Readdir(-1)
+		if err != nil {
+			return nil, err
+		}
+		dir = &dirContent{0, fi}
+		sftp.dirCache[hndInt] = dir
+	}
+	if dir.offset > len(sftp.dirCache[hndInt].fi) {
+		return nil, io.EOF
+	}
+	bound := dir.offset + entriesPerFetch
+	defer func(b int) { dir.offset = b }(bound)
+	if bound > len(sftp.dirCache[hndInt].fi) {
+		bound = len(sftp.dirCache[hndInt].fi) - 1
+	}
+	return createNamePacket(nil, sftp.dirCache[hndInt].fi[dir.offset:bound])
 }
 
 func readRequest(r io.Reader) (sftpMsg, error) {
@@ -215,7 +269,7 @@ func sendReply(w io.Writer, reply sftpMsg) {
 	} else {
 		copy(b[5:], reply.Payload)
 	}
-	log.Infof("data to send:%v", b)
+	log.Infof("Reply:%v Seq:%v Payload(Len:%v):%v", reply.Type, reply.ReqID, len(reply.Payload), reply.Payload)
 	w.Write(b)
 }
 
@@ -240,7 +294,7 @@ func (sftp *Sftp) cleanUp() {
 	}
 
 	if er := recover(); er != nil {
-		log.Error("Recover from parsing error")
+		log.Error("Recover from parsing error: ", er)
 	}
 
 }
