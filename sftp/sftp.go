@@ -71,7 +71,11 @@ func (sftp *Sftp) HandleRequest() {
 			}
 			break
 		}
-		log.Infof("Req:%v Seq:%d Payload(Len:%v):%v", req.Type, req.ReqID, len(req.Payload), req.Payload)
+		if req.Type == SSH_FXP_DATA || req.Type == SSH_FXP_WRITE {
+			log.Infof("Req:%v Seq:%d Payload(Len:%v)", req.Type, req.ReqID, len(req.Payload))
+		} else {
+			log.Infof("Req:%v Seq:%d Payload(Len:%v):%v", req.Type, req.ReqID, len(req.Payload), req.Payload)
+		}
 		switch req.Type {
 		case SSH_FXP_INIT:
 			sendReply(sftp.conn, createInit())
@@ -138,6 +142,7 @@ func (sftp *Sftp) HandleRequest() {
 			}
 			sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_OK))
 		case SSH_FXP_LSTAT, SSH_FXP_STAT:
+			// Currently we don't distinguish symlink
 			path := byteToStr(req.Payload)
 			if len(path) == 0 {
 				sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_BAD_MESSAGE))
@@ -150,13 +155,55 @@ func (sftp *Sftp) HandleRequest() {
 				continue
 			}
 			b := make([]byte, 32)
-			fmt.Println(fi.Mode())
 			fileAttrToByte(b, fi)
 			sendReply(sftp.conn, sftpMsg{
 				Type:    SSH_FXP_ATTRS,
 				ReqID:   req.ReqID,
 				Payload: b,
 			})
+		case SSH_FXP_FSTAT:
+			handle := byteToStr(req.Payload)
+			b, err := sftp.readStat(handle)
+			if err != nil {
+				sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_FAILURE))
+				continue
+			}
+			sendReply(sftp.conn, sftpMsg{
+				ReqID:   req.ReqID,
+				Type:    SSH_FXP_ATTRS,
+				Payload: b,
+			})
+		case SSH_FXP_OPEN:
+			fileName := byteToStr(req.Payload)
+			pos := len(fileName) + 4
+			pFlags := binary.BigEndian.Uint32(req.Payload[pos:])
+			pos += 4
+			handle, err := sftp.openFile(fileName, FileFlag(pFlags), req.Payload[pos:])
+			if err != nil {
+				log.WithError(err).Error("Cannot create handle")
+				if err == os.ErrNotExist {
+					sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_NO_SUCH_FILE))
+				} else {
+					sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_FAILURE))
+				}
+				continue
+			}
+			b := make([]byte, 4+len(handle))
+			strToByte(b, handle)
+			sendReply(sftp.conn, sftpMsg{
+				ReqID:   req.ReqID,
+				Type:    SSH_FXP_HANDLE,
+				Payload: b,
+			})
+		case SSH_FXP_WRITE:
+			handle := byteToStr(req.Payload)
+			pos := len(handle) + 4
+			offset := binary.BigEndian.Uint64(req.Payload[pos:])
+			pos += 8
+			dataLen := int(binary.BigEndian.Uint32(req.Payload[pos:]))
+			pos += 4
+			sftp.writeFile(handle, req.Payload[pos:pos+dataLen], int64(offset))
+			sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_OK))
 		default:
 			sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_BAD_MESSAGE))
 		}
@@ -222,7 +269,7 @@ func (sftp *Sftp) readDir(hnd string) ([]byte, error) {
 		dir = &dirContent{0, fi}
 		sftp.dirCache[hndInt] = dir
 	}
-	if dir.offset > len(sftp.dirCache[hndInt].fi) {
+	if dir.offset+entriesPerFetch > len(sftp.dirCache[hndInt].fi) {
 		return nil, io.EOF
 	}
 	bound := dir.offset + entriesPerFetch
@@ -231,6 +278,26 @@ func (sftp *Sftp) readDir(hnd string) ([]byte, error) {
 		bound = len(sftp.dirCache[hndInt].fi) - 1
 	}
 	return createNamePacket(nil, sftp.dirCache[hndInt].fi[dir.offset:bound])
+}
+
+func (sftp *Sftp) readStat(hnd string) ([]byte, error) {
+	sftp.lock.RLock()
+	defer sftp.lock.RUnlock()
+	hndInt, err := strconv.Atoi(hnd)
+	if err != nil {
+		return nil, err
+	}
+	file, exists := sftp.fileHandleMap[hndInt]
+	if !exists {
+		return nil, os.ErrNotExist
+	}
+	fi, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	b := make([]byte, 32)
+	fileAttrToByte(b, fi)
+	return b, nil
 }
 
 func readRequest(r io.Reader) (sftpMsg, error) {
@@ -286,6 +353,80 @@ func getLsString(fi os.FileInfo) string {
 		size, fi.ModTime().Format("Jan 02 15:04"), fi.Name())
 }
 
+func (sftp *Sftp) openFile(file string, flag FileFlag, attr []byte) (string, error) {
+	sftp.lock.Lock()
+	defer sftp.lock.Unlock()
+
+	intflag := 0
+	if flag&SSH_FXF_CREAT != 0 {
+		intflag |= os.O_CREATE
+	}
+	if flag&SSH_FXF_APPEND != 0 {
+		intflag |= os.O_APPEND
+	}
+	if flag&SSH_FXF_READ != 0 && flag&SSH_FXF_WRITE != 0 {
+		intflag |= os.O_RDWR
+	} else if flag&SSH_FXF_READ != 0 {
+		intflag |= os.O_RDONLY
+	} else if flag&SSH_FXF_WRITE != 0 {
+		intflag |= os.O_WRONLY
+	}
+	if flag&SSH_FXF_TRUNC != 0 {
+		intflag |= os.O_TRUNC
+	}
+	var f afero.File
+	var err error
+	if flag&SSH_FXF_CREAT != 0 {
+		f, err = sftp.vfs.Create(file)
+	} else {
+		f, err = sftp.vfs.OpenFile(file, intflag, byteToFileMode(attr))
+	}
+	if err != nil {
+		return "", err
+	}
+	hnd := sftp.nextHandle
+	sftp.fileHandleMap[hnd] = f
+	sftp.nextHandle++
+	return strconv.Itoa(hnd), nil
+}
+
+func (sftp *Sftp) writeFile(handle string, b []byte, offset int64) error {
+	hnd, err := strconv.Atoi(handle)
+	if err != nil {
+		return err
+	}
+	sftp.lock.RLock()
+	defer sftp.lock.RUnlock()
+	fp, exists := sftp.fileHandleMap[hnd]
+	if !exists {
+		return os.ErrNotExist
+	}
+	n, err := fp.WriteAt(b, offset)
+	if len(b) != n || err != nil {
+		return err
+	}
+	return nil
+}
+
+func (sftp *Sftp) closeFile(handle string) error {
+	hnd, err := strconv.Atoi(handle)
+	if err != nil {
+		return err
+	}
+	sftp.lock.Lock()
+	defer sftp.lock.Unlock()
+	fp, exists := sftp.fileHandleMap[hnd]
+	if !exists {
+		return os.ErrNotExist
+	}
+	err = fp.Close()
+	if err != nil {
+		return err
+	}
+	delete(sftp.fileHandleMap, hnd)
+	return nil
+}
+
 func (sftp *Sftp) cleanUp() {
 	if len(sftp.fileHandleMap) > 0 {
 		for _, file := range sftp.fileHandleMap {
@@ -296,5 +437,5 @@ func (sftp *Sftp) cleanUp() {
 	if er := recover(); er != nil {
 		log.Error("Recover from parsing error: ", er)
 	}
-
+	sftp.quit <- 1
 }

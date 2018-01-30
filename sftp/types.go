@@ -63,6 +63,17 @@ const (
 	SSH_FILEXFER_ATTR_EXTENDED AttrFlag = 0x80000000
 )
 
+type FileFlag uint32
+
+const (
+	SSH_FXF_READ FileFlag = 1 << iota
+	SSH_FXF_WRITE
+	SSH_FXF_APPEND
+	SSH_FXF_CREAT
+	SSH_FXF_TRUNC
+	SSH_FXF_EXCL
+)
+
 type StatusCode uint32
 
 const (
@@ -95,7 +106,8 @@ func strToByte(b []byte, s string) {
 }
 
 func byteToStr(b []byte) string {
-	return string(b[4:])
+	strLen := binary.BigEndian.Uint32(b)
+	return string(b[4 : 4+strLen])
 }
 
 // fileAttrToByte writes a byte array of size 36 into b
@@ -118,6 +130,15 @@ func fileAttrToByte(b []byte, fi os.FileInfo) {
 	binary.BigEndian.PutUint32(b[20:], fileModeToBit(fi.Mode()))
 	binary.BigEndian.PutUint32(b[24:], uint32(atime.Unix()))
 	binary.BigEndian.PutUint32(b[28:], uint32(mtime.Unix()))
+}
+
+func byteToFileMode(b []byte) os.FileMode {
+	flag := AttrFlag(binary.BigEndian.Uint32(b))
+	var fileMode os.FileMode = 0000
+	if flag&SSH_FILEXFER_ATTR_PERMISSIONS != 0 {
+
+	}
+	return fileMode
 }
 
 func createInit() sftpMsg {
