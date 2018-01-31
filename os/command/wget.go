@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/mkishere/sshsyrup/os"
-	"github.com/ogier/pflag"
 	"github.com/spf13/afero"
+	"github.com/spf13/pflag"
 )
 
 type wget struct{}
