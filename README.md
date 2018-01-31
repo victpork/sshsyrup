@@ -6,6 +6,7 @@ A SSH honeypot with rich features written in Go
 - SSH self-defined accounts and passwords, also allow any logins
 - Fake shell. Records shell sessions and upload to [asciinema.org](https://asciinema.org) (Or, if you wish, can log as [UML-compatible](http://user-mode-linux.sourceforge.net/old/tty_logging.html) format)
 - Virtual Filesystem for browsing and fooling intruder
+- SFTP subsystem support for uploading/downloading files
 - Logs key signature to log
 - Log in JSON format for easy parsing
 - Record local and remote host when client attempt to create port redirection
@@ -94,4 +95,3 @@ Feel free to submit feature request/bug report via the GitHub issue tracker.
 
 ### TODO
 - Minimal set of POSIX commands/utilites
-- Mock SFTP/SCP/Port forwarding
