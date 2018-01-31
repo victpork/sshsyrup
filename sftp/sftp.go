@@ -238,6 +238,8 @@ func (sftp *Sftp) HandleRequest() {
 				continue
 			}
 			sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_OK))
+		case SSH_FXP_RMDIR,SSH_FXP_SETSTAT,SSH_FXP_REMOVE,SSH_FXP_RENAME:
+			sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_OK))
 		default:
 			sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_BAD_MESSAGE))
 		}
