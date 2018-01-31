@@ -230,6 +230,14 @@ func (sftp *Sftp) HandleRequest() {
 				continue
 			}
 			sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_OK))
+		case SSH_FXP_MKDIR:
+			path := byteToStr(req.Payload)
+			err := sftp.Mkdir(path, req.Payload[len(path):])
+			if err != nil {
+				sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_FAILURE))
+				continue
+			}
+			sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_OK))
 		default:
 			sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_BAD_MESSAGE))
 		}
@@ -475,6 +483,10 @@ func (sftp *Sftp) closeFile(handle string) error {
 	}
 	delete(sftp.fileHandleMap, hnd)
 	return nil
+}
+
+func (sftp *Sftp) Mkdir(path string, attr []byte) error {
+	return sftp.vfs.Mkdir(path, byteToFileMode(attr))
 }
 
 func (sftp *Sftp) cleanUp() {
