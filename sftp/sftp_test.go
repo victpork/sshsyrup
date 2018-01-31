@@ -23,11 +23,8 @@ func TestNamePacket(t *testing.T) {
 		t.Fatal(err)
 	}
 	fi, err := vfs.Stat("/home/mk")
-	b, err := createNamePacket([]string{"/home/mk"}, []os.FileInfo{fi})
+	_, err = createNamePacket([]string{"/home/mk"}, []os.FileInfo{fi})
 	if err != nil {
 		t.Fatal(err)
-	}
-	if len(b) != 3 {
-		t.Error(b)
 	}
 }
