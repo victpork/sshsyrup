@@ -17,13 +17,6 @@ func TestStrToByte(t *testing.T) {
 	}
 }
 
-func TestInitPacket(t *testing.T) {
-	p := createInit()
-	if int(p.Length) != len(p.Payload)+1 {
-		t.Errorf("Size mismatch: Expected %v, Actual %v", p.Length, len(p.Payload))
-	}
-}
-
 func TestReplyInitPacket(t *testing.T) {
 	p := createInit()
 	b := bytes.Buffer{}

@@ -31,6 +31,7 @@ type Sftp struct {
 	nextHandle    int
 	lock          sync.RWMutex
 	dirCache      map[int]*dirContent
+	fileEOFCache  map[int]bool
 }
 
 type dirContent struct {
@@ -55,7 +56,7 @@ func NewSftp(conn io.ReadWriter, vfs afero.Fs, user string, quitSig chan<- int) 
 	if exists, _ := fs.DirExists(u.Homedir); !exists {
 		fs.MkdirAll(u.Homedir, 0600)
 	}
-	return &Sftp{conn, fs, u.Homedir, quitSig, map[int]afero.File{}, 0, sync.RWMutex{}, map[int]*dirContent{}}
+	return &Sftp{conn, fs, u.Homedir, quitSig, map[int]afero.File{}, 0, sync.RWMutex{}, map[int]*dirContent{}, map[int]bool{}}
 }
 
 func (sftp *Sftp) HandleRequest() {
@@ -195,6 +196,27 @@ func (sftp *Sftp) HandleRequest() {
 				Type:    SSH_FXP_HANDLE,
 				Payload: b,
 			})
+		case SSH_FXP_READ:
+			handle := byteToStr(req.Payload)
+			pos := len(handle) + 4
+			offset := binary.BigEndian.Uint64(req.Payload[pos:])
+			pos += 8
+			dataLen := int(binary.BigEndian.Uint32(req.Payload[pos:]))
+			b, err := sftp.ReadFile(handle, int64(offset), dataLen)
+			if err == io.EOF {
+				sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_EOF))
+				continue
+			} else if err != nil {
+				sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_FAILURE))
+				continue
+			}
+			bLen := make([]byte, 4)
+			binary.BigEndian.PutUint32(bLen, uint32(len(b)))
+			sendReply(sftp.conn, sftpMsg{
+				ReqID:   req.ReqID,
+				Type:    SSH_FXP_DATA,
+				Payload: append(bLen, b...),
+			})
 		case SSH_FXP_WRITE:
 			handle := byteToStr(req.Payload)
 			pos := len(handle) + 4
@@ -202,7 +224,11 @@ func (sftp *Sftp) HandleRequest() {
 			pos += 8
 			dataLen := int(binary.BigEndian.Uint32(req.Payload[pos:]))
 			pos += 4
-			sftp.writeFile(handle, req.Payload[pos:pos+dataLen], int64(offset))
+			err := sftp.writeFile(handle, req.Payload[pos:pos+dataLen], int64(offset))
+			if err != nil {
+				sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_FAILURE))
+				continue
+			}
 			sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_OK))
 		default:
 			sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_BAD_MESSAGE))
@@ -242,7 +268,7 @@ func (sftp *Sftp) close(hnd string) error {
 
 	delete(sftp.fileHandleMap, hndInt)
 	delete(sftp.dirCache, hndInt)
-
+	delete(sftp.fileEOFCache, hndInt)
 	return nil
 }
 func (sftp *Sftp) readDir(hnd string) ([]byte, error) {
@@ -269,13 +295,13 @@ func (sftp *Sftp) readDir(hnd string) ([]byte, error) {
 		dir = &dirContent{0, fi}
 		sftp.dirCache[hndInt] = dir
 	}
-	if dir.offset+entriesPerFetch > len(sftp.dirCache[hndInt].fi) {
+	if dir.offset > len(sftp.dirCache[hndInt].fi) {
 		return nil, io.EOF
 	}
 	bound := dir.offset + entriesPerFetch
 	defer func(b int) { dir.offset = b }(bound)
 	if bound > len(sftp.dirCache[hndInt].fi) {
-		bound = len(sftp.dirCache[hndInt].fi) - 1
+		bound = len(sftp.dirCache[hndInt].fi)
 	}
 	return createNamePacket(nil, sftp.dirCache[hndInt].fi[dir.offset:bound])
 }
@@ -388,6 +414,30 @@ func (sftp *Sftp) openFile(file string, flag FileFlag, attr []byte) (string, err
 	sftp.fileHandleMap[hnd] = f
 	sftp.nextHandle++
 	return strconv.Itoa(hnd), nil
+}
+
+func (sftp *Sftp) ReadFile(handle string, offset int64, n int) ([]byte, error) {
+	hnd, err := strconv.Atoi(handle)
+	if err != nil {
+		return nil, err
+	}
+	sftp.lock.RLock()
+	defer sftp.lock.RUnlock()
+	if sftp.fileEOFCache[hnd] {
+		return nil, io.EOF
+	}
+	fp, exists := sftp.fileHandleMap[hnd]
+	if !exists {
+		return nil, os.ErrNotExist
+	}
+	b := make([]byte, n)
+	bRead, err := fp.ReadAt(b, offset)
+	if err == io.EOF {
+		sftp.fileEOFCache[hnd] = true
+	} else if err != nil {
+		return nil, err
+	}
+	return b[:bRead], nil
 }
 
 func (sftp *Sftp) writeFile(handle string, b []byte, offset int64) error {
