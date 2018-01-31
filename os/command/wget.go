@@ -32,7 +32,7 @@ func printTs() string {
 	return time.Now().Format("2006-01-02 03:04:05")
 }
 
-func (wg wget) Exec(args []string, sys *os.System) int {
+func (wg wget) Exec(args []string, sys os.Sys) int {
 	flag.SetOutput(sys.Out())
 	err := flag.Parse(args)
 	f := flag.Args()
@@ -62,7 +62,7 @@ func (wg wget) Exec(args []string, sys *os.System) int {
 	if out == "" {
 		out = "index.html"
 	}
-	af := afero.Afero{sys.FSys}
+	af := afero.Afero{sys.FSys()}
 	err = af.WriteFile(out, b, 0666)
 	if err != nil {
 		//handle

@@ -2,18 +2,11 @@ package os
 
 import (
 	"fmt"
-	"io"
-	realos "os"
-	pathlib "path"
 	"strings"
 
+	"github.com/mkishere/sshsyrup/util/termlogger"
 	log "github.com/sirupsen/logrus"
-	"github.com/spf13/afero"
 	"golang.org/x/crypto/ssh/terminal"
-)
-
-var (
-	funcMap = make(map[string]Command)
 )
 
 type Shell struct {
@@ -23,19 +16,8 @@ type Shell struct {
 	sys        *System
 }
 
-func NewShell(iostream io.ReadWriter, fsys afero.Fs, width, height int, user, ipSrc string, log *log.Entry, termSignal chan<- int) *Shell {
-	sys := &System{
-		io:      iostream,
-		FSys:    fsys,
-		cwd:     usernameMapping[user].Homedir,
-		envVars: map[string]string{},
-		Width:   width,
-		Height:  height,
-	}
-	aferoFs := afero.Afero{Fs: fsys}
-	if exists, _ := aferoFs.DirExists(usernameMapping[user].Homedir); !exists {
-		aferoFs.MkdirAll(usernameMapping[user].Homedir, 0644)
-	}
+func NewShell(sys *System, ipSrc string, log *log.Entry, termSignal chan<- int) *Shell {
+
 	return &Shell{
 		log:        log,
 		termSignal: termSignal,
@@ -43,8 +25,11 @@ func NewShell(iostream io.ReadWriter, fsys afero.Fs, width, height int, user, ip
 	}
 }
 
-func (sh *Shell) HandleRequest() {
-	sh.terminal = terminal.NewTerminal(sh.sys.IOStream(), "$ ")
+func (sh *Shell) HandleRequest(hook termlogger.LogHook) {
+	tLog := termlogger.NewLogger(hook, sh.sys.IOStream())
+	defer tLog.Close()
+
+	sh.terminal = terminal.NewTerminal(tLog, "$ ")
 	defer func() {
 		if r := recover(); r != nil {
 			sh.log.Errorf("Recovered from panic %v", r)
@@ -83,10 +68,10 @@ cmdLoop:
 		case strings.HasPrefix(cmd, "export"):
 
 		default:
-			// Start parsing script
+			// TODO: parse script
 
 			args := strings.SplitN(cmd, " ", 2)
-			n, err := sh.Exec(args[0], args[1:])
+			n, err := sh.sys.exec(args[0], args[1:], tLog)
 			if err != nil {
 				sh.terminal.Write([]byte(fmt.Sprintf("%v: command not found\n", args[0])))
 			} else {
@@ -96,45 +81,8 @@ cmdLoop:
 	}
 }
 
-func (sh *Shell) input(line string) error {
-	switch {
-	case strings.HasPrefix(line, "cd "):
-		err := sh.sys.Chdir(line[3:])
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (sh *Shell) Exec(path string, args []string) (int, error) {
-	cmd := pathlib.Base(path)
-	if execFunc, ok := funcMap[cmd]; ok {
-		defer func() {
-			if r := recover(); r != nil {
-				sh.log.WithFields(log.Fields{
-					"cmd":   path,
-					"args": args,
-					"error": r,
-				}).Error("Command has crashed")
-				sh.terminal.Write([]byte("Segmentation fault\n"))
-			}
-		}()
-		res := execFunc.Exec(args, sh.sys)
-		return res, nil
-	}
-
-	return -1, realos.ErrNotExist
-}
-
 func (sh *Shell) SetSize(width, height int) error {
-	sh.sys.Width = width
-	sh.sys.Height = height
+	sh.sys.width = width
+	sh.sys.height = height
 	return sh.terminal.SetSize(width, height)
-}
-
-// RegisterCommand puts the command implementation into map so
-// it can be invoked from command line
-func RegisterCommand(name string, cmd Command) {
-	funcMap[name] = cmd
 }

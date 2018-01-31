@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	os "github.com/mkishere/sshsyrup/os"
@@ -20,8 +21,9 @@ type SSHSession struct {
 	clientVersion string
 	activity      chan bool
 	sshChan       <-chan ssh.NewChannel
-	ptyReq        *ptyRequest
 	log           *log.Entry
+	sys           *os.System
+	term          string
 }
 
 type envRequest struct {
@@ -109,7 +111,9 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 						req.Reply(false, nil)
 					} else {
 						s.log.WithField("reqType", req.Type).Infof("User requesting pty(%v %vx%v)", ptyreq.Term, ptyreq.Width, ptyreq.Height)
-						s.ptyReq = &ptyreq
+
+						s.sys = os.NewSystem(s.user, vfs, channel, int(ptyreq.Width), int(ptyreq.Height), s.log)
+						s.term = ptyreq.Term
 						req.Reply(true, nil)
 					}
 				case "env":
@@ -126,22 +130,21 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 					}
 				case "shell":
 					s.log.WithField("reqType", req.Type).Info("User requesting shell access")
-					if s.ptyReq == nil {
-						s.ptyReq = &ptyRequest{
-							Width:  80,
-							Height: 24,
-							Term:   "vt100",
-						}
+					if s.sys == nil {
+						s.sys = os.NewSystem(s.user, vfs, channel, 80, 24, s.log)
 					}
-					// The need of a goroutine here is that PuTTY will wait for reply before acknowledge it enters shell mode
+
+					sh = os.NewShell(s.sys, s.src.String(), s.log, quitSignal)
+
+					// Create hook for session logger (For recording session to UML/asciinema)
 					var hook termlogger.LogHook
 					if config.SessionLogFmt == "asciinema" {
 						asciiLogParams := map[string]string{
-							"TERM": s.ptyReq.Term,
+							"TERM": s.term,
 							"USER": s.user,
 							"SRC":  s.src.String(),
 						}
-						hook, err = termlogger.NewAsciinemaHook(int(s.ptyReq.Width), int(s.ptyReq.Height),
+						hook, err = termlogger.NewAsciinemaHook(s.sys.Width(), s.sys.Height(),
 							config.AcinemaAPIEndPt, config.AcinemaAPIKey, asciiLogParams)
 
 					} else if config.SessionLogFmt == "uml" {
@@ -152,10 +155,8 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 					if err != nil {
 						log.Errorf("Cannot create %v log file", config.SessionLogFmt)
 					}
-					tLog := termlogger.NewLogger(hook, channel)
-					defer tLog.Close()
-					sh = os.NewShell(tLog, vfs, int(s.ptyReq.Width), int(s.ptyReq.Height), s.user, s.src.String(), s.log, quitSignal)
-					go sh.HandleRequest()
+					// The need of a goroutine here is that PuTTY will wait for reply before acknowledge it enters shell mode
+					go sh.HandleRequest(hook)
 					req.Reply(true, nil)
 				case "subsystem":
 					subsys := string(req.Payload[4:])
@@ -179,8 +180,18 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 						"reqType": req.Type,
 						"cmd":     cmd,
 					}).Info("User request remote exec")
-					channel.Write([]byte(fmt.Sprintf("%v: command not found\n", cmd)))
-					quitSignal <- 0
+					args := strings.SplitN(cmd, " ", 2)
+					var sys *os.System
+					if s.sys == nil {
+						sys = os.NewSystem(s.user, vfs, channel, 80, 24, s.log)
+					} else {
+						sys = s.sys
+					}
+					n, err := sys.Exec(args[0], args[1:])
+					if err != nil {
+						channel.Write([]byte(fmt.Sprintf("%v: command not found\n", cmd)))
+					}
+					quitSignal <- n
 					req.Reply(true, nil)
 				default:
 					s.log.WithField("reqType", req.Type).Infof("Unknown channel request type %v", req.Type)
