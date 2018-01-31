@@ -168,7 +168,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 				case "window-change":
 					s.log.WithField("reqType", req.Type).Info("User shell window size changed")
 					if sh != nil {
-						var winChg *winChgRequest
+						winChg := &winChgRequest{}
 						if err := ssh.Unmarshal(req.Payload, winChg); err != nil {
 							req.Reply(false, nil)
 						}
