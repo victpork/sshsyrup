@@ -183,7 +183,7 @@ func (sys *System) exec(path string, args []string, logger io.ReadWriter) (int, 
 					"args":  args,
 					"error": r,
 				}).Error("Command has crashed")
-				sys.Err().Write([]byte("Segmentation fault\n"))
+				sys.Err().Write([]byte("Segmentation fault\r\n"))
 			}
 		}()
 		var res int
