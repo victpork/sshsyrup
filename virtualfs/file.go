@@ -12,13 +12,14 @@ import (
 
 type File struct {
 	os.FileInfo
-	zipFile  *zip.File
-	children map[string]*File
-	reader   io.ReadCloser
-	SymLink  string
-	closed   bool
-	offset   int64
-	buf      []byte
+	zipFile   *zip.File
+	children  map[string]*File
+	reader    io.ReadCloser
+	SymLink   string
+	closed    bool
+	offset    int64
+	buf       []byte
+	dirOffset int
 }
 
 func (f *File) fillBuffer(offset int64) (err error) {

@@ -80,24 +80,24 @@ func (t *VirtualFS) createNode(f *zip.File) error {
 
 // Mkdir creates a new directory according to the path argument passed in
 func (t *VirtualFS) Mkdir(path string, mode os.FileMode) error {
-	return os.ErrPermission
+	return &os.PathError{Op: "mkdir", Err: os.ErrPermission, Path: path}
 }
 
 // MkdirAll creates a new directory according to the path argument passed in
 func (t *VirtualFS) MkdirAll(path string, mode os.FileMode) error {
-	return os.ErrPermission
+	return &os.PathError{Op: "mkdir", Err: os.ErrPermission, Path: path}
 }
 
 func (t *VirtualFS) Remove(path string) error {
-	return os.ErrPermission
+	return &os.PathError{Op: "remove", Err: os.ErrPermission, Path: path}
 }
 
 func (t *VirtualFS) RemoveAll(path string) error {
-	return os.ErrPermission
+	return &os.PathError{Op: "remove", Err: os.ErrPermission, Path: path}
 }
 
 func (t *VirtualFS) Rename(new, old string) error {
-	return os.ErrPermission
+	return &os.PathError{Op: "rename", Err: os.ErrPermission, Path: old}
 }
 
 func (t *VirtualFS) fetchNode(path string, followSymLink bool) (*File, error) {
@@ -118,7 +118,7 @@ func (t *VirtualFS) fetchNode(path string, followSymLink bool) (*File, error) {
 		}
 		node, nodeExists := cwd.children[nodeName]
 		if !nodeExists {
-			return nil, os.ErrNotExist
+			return nil, &os.PathError{Op: "open", Err: os.ErrNotExist, Path: path}
 		}
 		cwd = node
 	}
@@ -126,7 +126,7 @@ func (t *VirtualFS) fetchNode(path string, followSymLink bool) (*File, error) {
 }
 
 func (t *VirtualFS) Create(path string) (afero.File, error) {
-	return nil, os.ErrPermission
+	return nil, &os.PathError{Op: "create", Err: os.ErrPermission, Path: path}
 }
 
 func (t *VirtualFS) Open(path string) (afero.File, error) {
@@ -154,9 +154,9 @@ func (t *VirtualFS) Stat(path string) (os.FileInfo, error) {
 }
 
 func (t *VirtualFS) Chmod(path string, mode os.FileMode) error {
-	return os.ErrPermission
+	return &os.PathError{Op: "chmod", Err: os.ErrPermission, Path: path}
 }
 
 func (t *VirtualFS) Chtimes(path string, modTime, accTime time.Time) error {
-	return os.ErrPermission
+	return &os.PathError{Op: "chtimes", Err: os.ErrPermission, Path: path}
 }
