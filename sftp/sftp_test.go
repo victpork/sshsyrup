@@ -17,15 +17,6 @@ func TestStrToByte(t *testing.T) {
 	}
 }
 
-func TestReplyInitPacket(t *testing.T) {
-	p := createInit()
-	b := bytes.Buffer{}
-	sendReply(&b, p)
-	if int(p.Length) != len(p.Payload)+1 {
-		t.Errorf("Size mismatch: Expected %v, Actual %v", p.Length, len(p.Payload))
-	}
-}
-
 func TestNamePacket(t *testing.T) {
 	vfs, err := virtualfs.NewVirtualFS("../filesystem.zip")
 	if err != nil {
