@@ -95,6 +95,7 @@ func (sys *System) Chdir(path string) error {
 	if !pathlib.IsAbs(path) {
 		path = sys.cwd + "/" + path
 	}
+	path = pathlib.Clean(path)
 	if exists, err := afero.DirExists(sys.fSys, path); err == nil && !exists {
 		return os.ErrNotExist
 	} else if err != nil {
