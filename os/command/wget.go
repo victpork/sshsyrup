@@ -14,14 +14,8 @@ import (
 
 type wget struct{}
 
-var (
-	flag = pflag.NewFlagSet("arg", pflag.ContinueOnError)
-	out  string
-)
-
 func init() {
 	os.RegisterCommand("wget", wget{})
-	flag.StringVar(&out, "O", "", "write documents to FILE.")
 
 }
 func (wg wget) GetHelp() string {
@@ -33,6 +27,10 @@ func printTs() string {
 }
 
 func (wg wget) Exec(args []string, sys os.Sys) int {
+	flag := pflag.NewFlagSet("arg", pflag.ContinueOnError)
+	var out string
+	flag.StringVar(&out, "O", "", "write documents to FILE.")
+
 	flag.SetOutput(sys.Out())
 	err := flag.Parse(args)
 	f := flag.Args()
