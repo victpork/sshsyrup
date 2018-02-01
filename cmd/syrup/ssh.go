@@ -190,7 +190,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 						"reqType": req.Type,
 						"cmd":     cmd,
 					}).Info("User request remote exec")
-					args := strings.SplitN(cmd, " ", 2)
+					args := strings.Split(cmd, " ")
 					var sys *os.System
 					if s.sys == nil {
 						sys = os.NewSystem(s.user, vfs, channel, 80, 24, s.log)

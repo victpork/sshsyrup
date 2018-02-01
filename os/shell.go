@@ -70,7 +70,7 @@ cmdLoop:
 		default:
 			// TODO: parse script
 
-			args := strings.SplitN(cmd, " ", 2)
+			args := strings.Split(cmd, " ")
 			n, err := sh.sys.exec(args[0], args[1:], tLog)
 			if err != nil {
 				sh.terminal.Write([]byte(fmt.Sprintf("%v: command not found\n", args[0])))
