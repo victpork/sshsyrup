@@ -169,7 +169,8 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 						"subSystem": subsys,
 					}).Infof("User requested subsystem %v", subsys)
 					if subsys == "sftp" {
-						sftpSrv := sftp.NewSftp(channel, vfs, s.user, quitSignal)
+						sftpSrv := sftp.NewSftp(channel, vfs,
+							s.user, s.log.WithField("subsystem", "sftp"), quitSignal)
 						go sftpSrv.HandleRequest()
 						req.Reply(true, nil)
 					} else {
@@ -197,9 +198,15 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 					} else {
 						sys = s.sys
 					}
+					if strings.HasPrefix(args[0], "scp") {
+						scp := &os.SCP{channel, vfs}
+						go scp.SinkMode(args[2], quitSignal)
+						req.Reply(true, nil)
+						continue
+					}
 					n, err := sys.Exec(args[0], args[1:])
 					if err != nil {
-						channel.Write([]byte(fmt.Sprintf("%v: command not found\n", cmd)))
+						channel.Write([]byte(fmt.Sprintf("%v: command not found\r\n", cmd)))
 					}
 					quitSignal <- n
 					req.Reply(true, nil)
@@ -207,6 +214,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 					s.log.WithField("reqType", req.Type).Infof("Unknown channel request type %v", req.Type)
 				}
 			case ret := <-quitSignal:
+				s.log.Info("User closing channel")
 				defer closeChannel(channel, ret)
 				return
 			}
