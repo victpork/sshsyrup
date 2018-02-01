@@ -204,4 +204,5 @@ func (sys *System) exec(path string, args []string, logger io.ReadWriter) (int, 
 // it can be invoked from command line
 func RegisterCommand(name string, cmd Command) {
 	funcMap[name] = cmd
+	funcMap[cmd.Where()] = cmd
 }
