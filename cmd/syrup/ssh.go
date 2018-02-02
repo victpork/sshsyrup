@@ -200,7 +200,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 					}
 					if strings.HasPrefix(args[0], "scp") {
 						scp := &os.SCP{channel, vfs}
-						go scp.SinkMode(args[2], quitSignal)
+						go scp.Main(args[1:], quitSignal)
 						req.Reply(true, nil)
 						continue
 					}
