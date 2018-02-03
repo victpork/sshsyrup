@@ -9,6 +9,7 @@ import (
 	"time"
 
 	os "github.com/mkishere/sshsyrup/os"
+	"github.com/mkishere/sshsyrup/os/command"
 	"github.com/mkishere/sshsyrup/sftp"
 	"github.com/mkishere/sshsyrup/util/termlogger"
 	log "github.com/sirupsen/logrus"
@@ -138,7 +139,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 						s.sys = os.NewSystem(s.user, vfs, channel, 80, 24, s.log)
 					}
 
-					sh = os.NewShell(s.sys, s.src.String(), s.log, quitSignal)
+					sh = os.NewShell(s.sys, s.src.String(), s.log.WithField("module", "shell"), quitSignal)
 
 					// Create hook for session logger (For recording session to UML/asciinema)
 					var hook termlogger.LogHook
@@ -170,7 +171,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 					}).Infof("User requested subsystem %v", subsys)
 					if subsys == "sftp" {
 						sftpSrv := sftp.NewSftp(channel, vfs,
-							s.user, s.log.WithField("subsystem", "sftp"), quitSignal)
+							s.user, s.log.WithField("module", "sftp"), quitSignal)
 						go sftpSrv.HandleRequest()
 						req.Reply(true, nil)
 					} else {
@@ -199,7 +200,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 						sys = s.sys
 					}
 					if strings.HasPrefix(args[0], "scp") {
-						scp := &os.SCP{channel, vfs}
+						scp := command.NewSCP(channel, vfs, s.log.WithField("module", "scp"))
 						go scp.Main(args[1:], quitSignal)
 						req.Reply(true, nil)
 						continue

@@ -101,6 +101,9 @@ func (t *VirtualFS) Rename(new, old string) error {
 }
 
 func (t *VirtualFS) fetchNode(path string, followSymLink bool) (*File, error) {
+	if strings.HasPrefix(path, "\\") {
+		path = strings.Replace(path, "\\", "/", -1)
+	}
 	path = pathlib.Clean(path)
 	cwd := t.root
 
