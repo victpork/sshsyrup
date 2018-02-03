@@ -39,7 +39,6 @@ type Config struct {
 	VFSGIDMapFile   string        `json:"virtualfs.gidMappingFile"`
 	VFSReadOnly     bool          `json:"virtualfs.readOnly"`
 	VFSTempDir      string        `json:"virtualfs.SavedFileDir"`
-	VFSWriteToImage bool          `json:"virtualfs.writeToImage"`
 	AcinemaAPIEndPt string        `json:"asciinema.apiEndpoint"`
 	AcinemaAPIKey   string        `json:"asciinema.apiKey"`
 }
@@ -54,7 +53,7 @@ var (
 		SvrAddr:         "0.0.0.0",
 		SvrPort:         2222,
 		SvrAllowRndUser: true,
-		SvrVer:          "SSH-2.0-OpenSSH_6.8p1 Ubuntu-2ubuntu2.8",
+		SvrVer:          "SSH-2.0-OpenSSH_6.8p1",
 		SvrMaxTries:     3,
 		SvrMaxConn:      10,
 		SvrTimeout:      time.Duration(time.Minute * 10),
@@ -75,7 +74,7 @@ func init() {
 	log.SetFormatter(&log.TextFormatter{ForceColors: true})
 	log.SetOutput(colorable.NewColorableStdout())
 	pathMap := lfshook.PathMap{
-		log.InfoLevel: fmt.Sprintf("logs/%v.log", time.Now().Format(logTimeFormat)),
+		log.InfoLevel: "logs/activity.log",
 	}
 
 	log.AddHook(lfshook.NewHook(
