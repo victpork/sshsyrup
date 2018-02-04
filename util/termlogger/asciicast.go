@@ -36,20 +36,20 @@ type AsciinemaHook struct {
 }
 
 const (
-	logTimeFormat string = "20060102-150405"
+	LogTimeFormat string = "20060102-150405"
 	input                = "i"
 	output               = "o"
 )
 
 // NewAsciinemaHook creates a new Asciinema hook
-func NewAsciinemaHook(width, height int, apiEndPt, apiKey string, params map[string]string) (LogHook, error) {
+func NewAsciinemaHook(width, height int, apiEndPt, apiKey string, params map[string]string, fileName string) (LogHook, error) {
 	now := time.Now()
 	header := asciiCast{
 		Version:   2,
 		Width:     width,
 		Height:    height,
 		Timestamp: now.Unix(),
-		Title:     fmt.Sprintf("%v@%v - %v", params["USER"], params["SRC"], now.Format(logTimeFormat)),
+		Title:     fmt.Sprintf("%v@%v - %v", params["USER"], params["SRC"], now.Format(LogTimeFormat)),
 		Env: map[string]string{
 			"TERM":  "vt100",
 			"SHELL": "/bin/sh",
@@ -65,7 +65,7 @@ func NewAsciinemaHook(width, height int, apiEndPt, apiKey string, params map[str
 		apiEndpoint: apiEndPt,
 		userName:    "syrupSSH",
 	}
-	aLog.fileName = fmt.Sprintf("logs/sessions/%v-%v.cast", params["USER"], aLog.createTime.Format(logTimeFormat))
+	aLog.fileName = aLog.createTime.Format(fileName)
 	if len(aLog.apikey) > 0 {
 		aLog.htClient = &http.Client{
 			Timeout: time.Second * 10,

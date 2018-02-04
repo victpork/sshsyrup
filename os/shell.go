@@ -2,6 +2,7 @@ package os
 
 import (
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/mkishere/sshsyrup/util/termlogger"
@@ -26,10 +27,17 @@ func NewShell(sys *System, ipSrc string, log *log.Entry, termSignal chan<- int) 
 }
 
 func (sh *Shell) HandleRequest(hook termlogger.LogHook) {
-	tLog := termlogger.NewLogger(hook, sh.sys.IOStream())
+
+	tLog := termlogger.NewLogger(hook, sh.sys.In(), sh.sys.Out(), sh.sys.Err())
 	defer tLog.Close()
 
-	sh.terminal = terminal.NewTerminal(tLog, "$ ")
+	sh.terminal = terminal.NewTerminal(struct {
+		io.Reader
+		io.Writer
+	}{
+		tLog.In(),
+		tLog.Out(),
+	}, "$ ")
 	defer func() {
 		if r := recover(); r != nil {
 			sh.log.Errorf("Recovered from panic %v", r)
@@ -47,9 +55,8 @@ cmdLoop:
 				sh.log.Info("EOF received from client")
 				sh.termSignal <- 0
 				return
-			} else {
-				sh.log.WithError(err).Error("Error when reading terminal")
 			}
+			sh.log.WithError(err).Error("Error when reading terminal")
 			break cmdLoop
 		case strings.TrimSpace(cmd) == "":
 			//Do nothing

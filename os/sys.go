@@ -47,7 +47,7 @@ type Sys interface {
 	Chdir(path string) error
 	In() io.Reader
 	Out() io.Writer
-	Err() io.ReadWriter
+	Err() io.Writer
 	Environ() (env []string)
 	SetEnv(key, value string) error
 	FSys() afero.Fs
@@ -59,13 +59,13 @@ type stdoutWrapper struct {
 }
 
 type sysLogWrapper struct {
+	termlogger.StdIOErr
 	*System
-	io.ReadWriter
 }
 
-func (sys *sysLogWrapper) In() io.Reader      { return sys.ReadWriter }
-func (sys *sysLogWrapper) Out() io.Writer     { return stdoutWrapper{sys.ReadWriter} }
-func (sys *sysLogWrapper) Err() io.ReadWriter { return sys.ReadWriter }
+func (sys *sysLogWrapper) In() io.Reader  { return sys.StdIOErr.In() }
+func (sys *sysLogWrapper) Out() io.Writer { return stdoutWrapper{sys.StdIOErr.Out()} }
+func (sys *sysLogWrapper) Err() io.Writer { return sys.StdIOErr.Out() }
 
 func NewSystem(user string, fs afero.Fs, channel ssh.Channel, width, height int, log *log.Entry) *System {
 	aferoFs := afero.Afero{fs}
@@ -113,7 +113,7 @@ func (sys *System) Out() io.Writer {
 	return stdoutWrapper{sys.sshChan}
 }
 
-func (sys *System) Err() io.ReadWriter {
+func (sys *System) Err() io.Writer {
 	return sys.sshChan.Stderr()
 }
 
@@ -172,7 +172,7 @@ func (sys *System) Exec(path string, args []string) (int, error) {
 	return sys.exec(path, args, nil)
 }
 
-func (sys *System) exec(path string, args []string, logger io.ReadWriter) (int, error) {
+func (sys *System) exec(path string, args []string, io termlogger.StdIOErr) (int, error) {
 	cmd := pathlib.Base(path)
 	if execFunc, ok := funcMap[cmd]; ok {
 
@@ -188,8 +188,8 @@ func (sys *System) exec(path string, args []string, logger io.ReadWriter) (int, 
 		}()
 		var res int
 		// If logger is not nil, redirect IO to it
-		if logger != nil {
-			loggedSys := &sysLogWrapper{sys, logger}
+		if io != nil {
+			loggedSys := &sysLogWrapper{io, sys}
 			res = execFunc.Exec(args, loggedSys)
 		} else {
 			res = execFunc.Exec(args, sys)

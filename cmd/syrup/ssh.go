@@ -150,7 +150,8 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 							"SRC":  s.src.String(),
 						}
 						hook, err = termlogger.NewAsciinemaHook(s.sys.Width(), s.sys.Height(),
-							config.AcinemaAPIEndPt, config.AcinemaAPIKey, asciiLogParams)
+							config.AcinemaAPIEndPt, config.AcinemaAPIKey, asciiLogParams,
+							fmt.Sprintf("logs/sessions/%v-%v.cast", s.user, termlogger.LogTimeFormat))
 
 					} else if config.SessionLogFmt == "uml" {
 						hook, err = termlogger.NewUMLHook(0, fmt.Sprintf("logs/sessions/%v-%v.ulm.log", s.user, time.Now().Format(logTimeFormat)))
