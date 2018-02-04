@@ -99,6 +99,6 @@ func getLsString(fi os.FileInfo) string {
 	if fi.IsDir() {
 		size = 4096
 	}
-	return fmt.Sprintf("%v    1 %-8s %-8s %8d %v %v", fi.Mode(), uName, gName,
+	return fmt.Sprintf("%v    1 %-8s %-8s %8d %v %v", strings.ToLower(fi.Mode().String()), uName, gName,
 		size, fi.ModTime().Format("Jan 02 15:04"), fi.Name())
 }
