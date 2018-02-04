@@ -35,32 +35,33 @@ go build -ldflags "-s -w" -o createfs ./cmd/createfs
 
 ### Setting up for the first run
 * Create and modify _config.json_. Here are the sample configuration (minimal setup)
-```json
-{
-    "server.addr": "0.0.0.0",
-    "server.port": 22,
-    "server.allowRandomUser": false
-}
-```
-* Prepare the virtual filesystem image by downloading the filesystem.zip from master branch or create your own by running
-```
-./createfs -p / -o filesystem.zip
-```
-Since we'll need to read every file from the directory, it will take some time to load.
-_For Windows, since there are no user/group information, the file/directory owner will always be root._
+    ```json
+    {
+        "server.addr": "0.0.0.0",
+        "server.port": 22,
+        "server.allowRandomUser": false
+    }
+    ```
+* Prepare the virtual filesystem image by downloading the filesystem.zip from master branch or create your own by running 
+   ```
+   ./createfs -p / -o filesystem.zip
+   ```
 
-Alternatively, you can create your own image file by using `zip` in Linux (or any compatible zip utility file that is capable preserving _uid_/_gid_, symbolic links and timestamps in zip file). After all the image created is a standard zip file. Theoretically you can zip your entire filesystem into a zip file and hosted in Syrup, but remember to exclude sensitive files like `/etc/passwd`
+   Since we'll need to read every file from the directory, it will take some time to load.  
+   _For Windows, since there are no user/group information, the file/directory owner will always be root._  
+
+   Alternatively, you can create your own image file by using `zip` in Linux (or any compatible zip utility file that is capable preserving _uid_/_gid_, symbolic links and timestamps in zip file). After all the image created is a standard zip file. Theoretically you can zip your entire filesystem into a zip file and hosted in Syrup, but remember to exclude sensitive files like `/etc/passwd`  
 
 * Prepare user and passwd file
 Put _passwd_ and _group_ file in the same directory as config.json. The format of both files are the same as their [real-life counterpart](http://www.linfo.org/etc_passwd.html) in _/etc_, except that passwd also stores the password in the second field of each line, and asterisk(*) in password field can be used to denote matching any password.
 * Generate SSH private key and renamed as _id\_rsa_ and put it in the same directory
-```
-ssh-keygen -t rsa
-```
+   ```
+   ssh-keygen -t rsa
+   ```
 * Start the server
-```
-./sshsyrup
-```
+   ```
+   ./sshsyrup
+   ```
 ### Config params
 See [wiki](https://github.com/mkishere/sshsyrup/wiki/Detail-Configuration-Parameters)
 ### Logging
