@@ -78,7 +78,9 @@ func init() {
 	pathMap := lfshook.PathMap{
 		log.InfoLevel: "logs/activity.log",
 	}
-
+	if _, err := os.Stat("logs"); os.IsNotExist(err) {
+		os.MkdirAll("logs/sessions", 0777)
+	}
 	log.AddHook(lfshook.NewHook(
 		pathMap,
 		&log.JSONFormatter{},
