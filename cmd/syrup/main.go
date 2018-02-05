@@ -33,6 +33,7 @@ type Config struct {
 	SvrMaxTries     int           `json:"server.maxTries"`
 	SvrMaxConn      int           `json:"server.maxConnections"`
 	SvrTimeout      time.Duration `json:"server.Timeout"`
+	SvrHostname     string        `json:"server.Hostname"`
 	SessionLogFmt   string        `json:"server.sessionLogFmt"`
 	VFSImgFile      string        `json:"virtualfs.imageFile"`
 	VFSUIDMapFile   string        `json:"virtualfs.uidMappingFile"`
@@ -57,6 +58,7 @@ var (
 		SvrMaxTries:     3,
 		SvrMaxConn:      10,
 		SvrTimeout:      time.Duration(time.Minute * 10),
+		SvrHostname:     "spr1139",
 		SessionLogFmt:   "asciinema",
 		VFSImgFile:      "filesystem.zip",
 		VFSUIDMapFile:   "passwd",

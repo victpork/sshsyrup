@@ -41,6 +41,7 @@ type System struct {
 	width, height int
 	log           *log.Entry
 	sessionLog    termlogger.LogHook
+	hostName      string
 }
 
 type Sys interface {
@@ -56,6 +57,7 @@ type Sys interface {
 	Height() int
 	CurrentUser() int
 	CurrentGroup() int
+	Hostname() string
 }
 type stdoutWrapper struct {
 	io.Writer
@@ -72,21 +74,22 @@ func (sys *sysLogWrapper) Err() io.Writer { return sys.StdIOErr.Out() }
 
 // NewSystem initializer a system object containing current user context: ID,
 // home directory, terminal dimensions, etc.
-func NewSystem(user string, fs afero.Fs, channel ssh.Channel, width, height int, log *log.Entry) *System {
+func NewSystem(user, host string, fs afero.Fs, channel ssh.Channel, width, height int, log *log.Entry) *System {
 	aferoFs := afero.Afero{fs}
 	if exists, _ := aferoFs.DirExists(usernameMapping[user].Homedir); !exists {
 		aferoFs.MkdirAll(usernameMapping[user].Homedir, 0644)
 	}
 
 	return &System{
-		cwd:     usernameMapping[user].Homedir,
-		fSys:    aferoFs,
-		envVars: map[string]string{},
-		sshChan: channel,
-		width:   width,
-		height:  height,
-		log:     log,
-		userId:  usernameMapping[user].UID,
+		cwd:      usernameMapping[user].Homedir,
+		fSys:     aferoFs,
+		envVars:  map[string]string{},
+		sshChan:  channel,
+		width:    width,
+		height:   height,
+		log:      log,
+		userId:   usernameMapping[user].UID,
+		hostName: host,
 	}
 }
 
@@ -115,6 +118,10 @@ func (sys *System) CurrentUser() int { return sys.userId }
 func (sys *System) CurrentGroup() int {
 	u := GetUserByID(sys.userId)
 	return u.GID
+}
+
+func (sys *System) Hostname() string {
+	return sys.hostName
 }
 
 // In returns a io.Reader that represent stdin

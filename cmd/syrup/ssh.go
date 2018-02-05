@@ -117,7 +117,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 					} else {
 						s.log.WithField("reqType", req.Type).Infof("User requesting pty(%v %vx%v)", ptyreq.Term, ptyreq.Width, ptyreq.Height)
 
-						s.sys = os.NewSystem(s.user, vfs, channel, int(ptyreq.Width), int(ptyreq.Height), s.log)
+						s.sys = os.NewSystem(s.user, config.SvrHostname, vfs, channel, int(ptyreq.Width), int(ptyreq.Height), s.log)
 						s.term = ptyreq.Term
 						req.Reply(true, nil)
 					}
@@ -136,7 +136,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 				case "shell":
 					s.log.WithField("reqType", req.Type).Info("User requesting shell access")
 					if s.sys == nil {
-						s.sys = os.NewSystem(s.user, vfs, channel, 80, 24, s.log)
+						s.sys = os.NewSystem(s.user, config.SvrHostname, vfs, channel, 80, 24, s.log)
 					}
 
 					sh = os.NewShell(s.sys, s.src.String(), s.log.WithField("module", "shell"), quitSignal)
@@ -196,7 +196,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 					args := strings.Split(cmd, " ")
 					var sys *os.System
 					if s.sys == nil {
-						sys = os.NewSystem(s.user, vfs, channel, 80, 24, s.log)
+						sys = os.NewSystem(s.user, config.SvrHostname, vfs, channel, 80, 24, s.log)
 					} else {
 						sys = s.sys
 					}

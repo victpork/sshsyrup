@@ -13,7 +13,6 @@ type uname struct{}
 
 const (
 	unameKName  = "Linux"
-	unameNName  = "spr1739"
 	unameKRel   = "4.4.0-43-generic"
 	unameKVer   = "#129-Ubuntu SMP Thu Mar 17 20:17:14 UTC 2017"
 	unameMach   = "x86-64"
@@ -59,7 +58,7 @@ func (un uname) Exec(args []string, sys os.Sys) int {
 		return 1
 	}
 	if *all {
-		fmt.Fprintf(sys.Out(), "%v %v %v %v %v %v %v %v\n", unameKName, unameNName, unameKRel,
+		fmt.Fprintf(sys.Out(), "%v %v %v %v %v %v %v %v\n", unameKName, sys.Hostname(), unameKRel,
 			unameKVer, unameMach, unameProc, unameHWPlat, unameOS)
 	} else if len(args) == 0 {
 		fmt.Fprintln(sys.Out(), unameKName)
@@ -74,7 +73,7 @@ func (un uname) Exec(args []string, sys os.Sys) int {
 			uNameStr.WriteString(unameKName)
 			fallthrough
 		case *nName:
-			uNameStr.WriteString(" " + unameNName)
+			uNameStr.WriteString(" " + sys.Hostname())
 			fallthrough
 		case *kRel:
 			uNameStr.WriteString(" " + unameKRel)
