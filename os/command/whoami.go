@@ -17,8 +17,9 @@ func (whoami) GetHelp() string {
 }
 
 func (whoami) Exec(args []string, sys os.Sys) int {
-	// TODO Hardcoded as root till API has way to get UID/GID
-	fmt.Fprintln(sys.Out(), "root")
+	id := sys.CurrentUser()
+	u := os.GetUserByID(id)
+	fmt.Fprintln(sys.Out(), u.Name)
 	return 0
 }
 

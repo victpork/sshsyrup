@@ -33,6 +33,7 @@ type Command interface {
 
 // System provides what most of os/sys does in the honeyport
 type System struct {
+	userId        int
 	cwd           string
 	fSys          afero.Fs
 	sshChan       ssh.Channel
@@ -53,6 +54,8 @@ type Sys interface {
 	FSys() afero.Fs
 	Width() int
 	Height() int
+	CurrentUser() int
+	CurrentGroup() int
 }
 type stdoutWrapper struct {
 	io.Writer
@@ -67,9 +70,10 @@ func (sys *sysLogWrapper) In() io.Reader  { return sys.StdIOErr.In() }
 func (sys *sysLogWrapper) Out() io.Writer { return stdoutWrapper{sys.StdIOErr.Out()} }
 func (sys *sysLogWrapper) Err() io.Writer { return sys.StdIOErr.Out() }
 
+// NewSystem initializer a system object containing current user context: ID,
+// home directory, terminal dimensions, etc.
 func NewSystem(user string, fs afero.Fs, channel ssh.Channel, width, height int, log *log.Entry) *System {
 	aferoFs := afero.Afero{fs}
-	// Create user home directory if not exists
 	if exists, _ := aferoFs.DirExists(usernameMapping[user].Homedir); !exists {
 		aferoFs.MkdirAll(usernameMapping[user].Homedir, 0644)
 	}
@@ -82,6 +86,7 @@ func NewSystem(user string, fs afero.Fs, channel ssh.Channel, width, height int,
 		width:   width,
 		height:  height,
 		log:     log,
+		userId:  usernameMapping[user].UID,
 	}
 }
 
@@ -103,6 +108,13 @@ func (sys *System) Chdir(path string) error {
 	}
 	sys.cwd = path
 	return nil
+}
+
+func (sys *System) CurrentUser() int { return sys.userId }
+
+func (sys *System) CurrentGroup() int {
+	u := GetUserByID(sys.userId)
+	return u.GID
 }
 
 // In returns a io.Reader that represent stdin
