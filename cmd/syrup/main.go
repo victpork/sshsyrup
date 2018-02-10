@@ -32,8 +32,9 @@ type Config struct {
 	SvrVer          string        `json:"server.ident"`
 	SvrMaxTries     int           `json:"server.maxTries"`
 	SvrMaxConn      int           `json:"server.maxConnections"`
-	SvrTimeout      time.Duration `json:"server.Timeout"`
+	SvrTimeout      time.Duration `json:"server.timeout"`
 	SvrHostname     string        `json:"server.Hostname"`
+	SvrCmdList      string        `json:"server.commandList"`
 	SessionLogFmt   string        `json:"server.sessionLogFmt"`
 	VFSImgFile      string        `json:"virtualfs.imageFile"`
 	VFSUIDMapFile   string        `json:"virtualfs.uidMappingFile"`
@@ -59,6 +60,7 @@ var (
 		SvrMaxConn:      10,
 		SvrTimeout:      time.Duration(time.Minute * 10),
 		SvrHostname:     "spr1139",
+		SvrCmdList:      "commands.txt",
 		SessionLogFmt:   "asciinema",
 		VFSImgFile:      "filesystem.zip",
 		VFSUIDMapFile:   "passwd",
@@ -104,6 +106,8 @@ func init() {
 	if err != nil {
 		log.Errorf("Cannot load group mapping file %v", config.VFSGIDMapFile)
 	}
+	// Load command list
+	honeyos.RegisterFakeCommand(readFiletoArray(config.SvrCmdList))
 }
 
 func main() {
@@ -231,4 +235,18 @@ func loadIDMapping(file string) (m map[int]string) {
 		linenum++
 	}
 	return
+}
+
+func readFiletoArray(path string) []string {
+	f, err := os.Open(path)
+	if err != nil {
+		return []string{}
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	var lines []string
+	for sc.Scan() {
+		lines = append(lines, sc.Text())
+	}
+	return lines
 }

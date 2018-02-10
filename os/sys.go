@@ -19,7 +19,15 @@ var (
 )
 
 var (
-	funcMap = make(map[string]Command)
+	funcMap      = make(map[string]Command)
+	fakeFuncList = make(map[string]struct{})
+)
+
+var (
+	errMsgList = map[string]struct{}{
+		"Segmentation fault": struct{}{},
+		"Permission denied":  struct{}{},
+	}
 )
 
 // Command interface allow classes to simulate real executable
@@ -70,7 +78,7 @@ type sysLogWrapper struct {
 
 func (sys *sysLogWrapper) In() io.Reader  { return sys.StdIOErr.In() }
 func (sys *sysLogWrapper) Out() io.Writer { return stdoutWrapper{sys.StdIOErr.Out()} }
-func (sys *sysLogWrapper) Err() io.Writer { return sys.StdIOErr.Out() }
+func (sys *sysLogWrapper) Err() io.Writer { return stdoutWrapper{sys.StdIOErr.Err()} }
 
 // NewSystem initializer a system object containing current user context: ID,
 // home directory, terminal dimensions, etc.
@@ -133,7 +141,7 @@ func (sys *System) Out() io.Writer {
 }
 
 func (sys *System) Err() io.Writer {
-	return sys.sshChan.Stderr()
+	return stdoutWrapper{sys.sshChan.Stderr()}
 }
 
 func (sys *System) IOStream() io.ReadWriter { return sys.sshChan }
@@ -202,7 +210,7 @@ func (sys *System) exec(path string, args []string, io termlogger.StdIOErr) (int
 					"args":  args,
 					"error": r,
 				}).Error("Command has crashed")
-				sys.Err().Write([]byte("Segmentation fault\r\n"))
+				sys.Err().Write([]byte("Segmentation fault\n"))
 			}
 		}()
 		var res int
@@ -214,6 +222,14 @@ func (sys *System) exec(path string, args []string, io termlogger.StdIOErr) (int
 			res = execFunc.Exec(args, sys)
 		}
 		return res, nil
+	} else if _, inList := fakeFuncList[cmd]; inList {
+		// Print random error message
+		// Make use of golang map rnadom nature :)
+		for msg := range errMsgList {
+			sys.Err().Write([]byte(msg + "\n"))
+			break
+		}
+		return 1, nil
 	}
 
 	return 127, &os.PathError{Op: "exec", Path: path, Err: os.ErrNotExist}
@@ -224,4 +240,12 @@ func (sys *System) exec(path string, args []string, io termlogger.StdIOErr) (int
 func RegisterCommand(name string, cmd Command) {
 	funcMap[name] = cmd
 	funcMap[cmd.Where()] = cmd
+}
+
+// RegisterFakeCommand put commands into register so that when
+// typed in terminal they will print out SegFault
+func RegisterFakeCommand(cmdList []string) {
+	for i := range cmdList {
+		fakeFuncList[cmdList[i]] = struct{}{}
+	}
 }
