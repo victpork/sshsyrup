@@ -52,7 +52,7 @@ cmdLoop:
 		switch {
 		case err != nil:
 			if err.Error() == "EOF" {
-				sh.log.Info("EOF received from client")
+				sh.log.WithError(err).Info("Client disconnected from server")
 				sh.termSignal <- 0
 				return
 			}

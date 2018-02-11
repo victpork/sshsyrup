@@ -21,7 +21,6 @@ type SSHSession struct {
 	user          string
 	src           net.Addr
 	clientVersion string
-	activity      chan bool
 	sshChan       <-chan ssh.NewChannel
 	log           *log.Entry
 	sys           *os.System
@@ -68,21 +67,11 @@ func NewSSHSession(nConn net.Conn, sshConfig *ssh.ServerConfig) (*SSHSession, er
 	})
 	logger.Infof("New SSH connection with client")
 
-	activity := make(chan bool)
-	go func(activity chan bool) {
-		defer nConn.Close()
-		for range activity {
-			// When receive from activity channel, reset deadline
-			nConn.SetReadDeadline(time.Now().Add(config.SvrTimeout))
-		}
-	}(activity)
-
 	go ssh.DiscardRequests(reqs)
 	return &SSHSession{
 		user:          conn.User(),
 		src:           conn.RemoteAddr(),
 		clientVersion: string(conn.ClientVersion()),
-		activity:      activity,
 		sshChan:       chans,
 		log:           logger,
 	}, nil

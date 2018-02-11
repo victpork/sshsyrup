@@ -26,23 +26,24 @@ import (
 
 // Config type is a map for storing config values
 type Config struct {
-	SvrAddr         string        `json:"server.addr"`
-	SvrPort         int           `json:"server.port"`
-	SvrAllowRndUser bool          `json:"server.allowRandomUser"`
-	SvrVer          string        `json:"server.ident"`
-	SvrMaxTries     int           `json:"server.maxTries"`
-	SvrMaxConn      int           `json:"server.maxConnections"`
-	SvrTimeout      time.Duration `json:"server.timeout"`
-	SvrHostname     string        `json:"server.Hostname"`
-	SvrCmdList      string        `json:"server.commandList"`
-	SessionLogFmt   string        `json:"server.sessionLogFmt"`
-	VFSImgFile      string        `json:"virtualfs.imageFile"`
-	VFSUIDMapFile   string        `json:"virtualfs.uidMappingFile"`
-	VFSGIDMapFile   string        `json:"virtualfs.gidMappingFile"`
-	VFSReadOnly     bool          `json:"virtualfs.readOnly"`
-	VFSTempDir      string        `json:"virtualfs.SavedFileDir"`
-	AcinemaAPIEndPt string        `json:"asciinema.apiEndpoint"`
-	AcinemaAPIKey   string        `json:"asciinema.apiKey"`
+	SvrAddr         string `json:"server.addr"`
+	SvrPort         int    `json:"server.port"`
+	SvrAllowRndUser bool   `json:"server.allowRandomUser"`
+	SvrVer          string `json:"server.ident"`
+	SvrMaxTries     int    `json:"server.maxTries"`
+	SvrMaxConn      int    `json:"server.maxConnections"`
+	SvrTimeout      int    `json:"server.timeout"`
+	SvrSpeed        int    `json:"server.speed"`
+	SvrHostname     string `json:"server.Hostname"`
+	SvrCmdList      string `json:"server.commandList"`
+	SessionLogFmt   string `json:"server.sessionLogFmt"`
+	VFSImgFile      string `json:"virtualfs.imageFile"`
+	VFSUIDMapFile   string `json:"virtualfs.uidMappingFile"`
+	VFSGIDMapFile   string `json:"virtualfs.gidMappingFile"`
+	VFSReadOnly     bool   `json:"virtualfs.readOnly"`
+	VFSTempDir      string `json:"virtualfs.SavedFileDir"`
+	AcinemaAPIEndPt string `json:"asciinema.apiEndpoint"`
+	AcinemaAPIKey   string `json:"asciinema.apiKey"`
 }
 
 const (
@@ -58,7 +59,8 @@ var (
 		SvrVer:          "SSH-2.0-OpenSSH_6.8p1",
 		SvrMaxTries:     3,
 		SvrMaxConn:      10,
-		SvrTimeout:      time.Duration(time.Minute * 10),
+		SvrTimeout:      600,
+		SvrSpeed:        -1,
 		SvrHostname:     "spr1139",
 		SvrCmdList:      "commands.txt",
 		SessionLogFmt:   "asciinema",
@@ -188,13 +190,13 @@ func main() {
 
 	for {
 		nConn, err := listener.Accept()
-
-		log.WithField("srcIP", nConn.RemoteAddr().String()).Info("Connection established")
+		tConn := NewThrottledConnection(nConn, int64(config.SvrSpeed), time.Duration(time.Second*time.Duration(config.SvrTimeout)))
+		log.WithField("srcIP", tConn.RemoteAddr().String()).Info("Connection established")
 		if err != nil {
 			log.WithError(err).Error("Failed to accept incoming connection")
 			continue
 		}
-		connChan <- nConn
+		connChan <- tConn
 	}
 
 }
