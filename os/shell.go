@@ -60,7 +60,7 @@ cmdLoop:
 			break cmdLoop
 		case strings.TrimSpace(cmd) == "":
 			//Do nothing
-		case cmd == "logout", cmd == "quit":
+		case cmd == "logout", cmd == "exit":
 			sh.log.Infof("User logged out")
 			sh.termSignal <- 0
 			return
