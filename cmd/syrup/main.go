@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -80,8 +81,10 @@ func init() {
 	// Merge
 	mergo.Merge(&config, defaultCfg)
 
-	log.SetFormatter(&log.TextFormatter{ForceColors: true})
-	log.SetOutput(colorable.NewColorableStdout())
+	if runtime.GOOS == "windows" {
+		log.SetFormatter(&log.TextFormatter{ForceColors: true})
+		log.SetOutput(colorable.NewColorableStdout())
+	}
 	pathMap := lfshook.PathMap{
 		log.InfoLevel: "logs/activity.log",
 	}
@@ -254,9 +257,6 @@ func readFiletoArray(path string) []string {
 	var lines []string
 	for sc.Scan() {
 		lines = append(lines, sc.Text())
-	}
-	return lines
-}
 	}
 	return lines
 }
