@@ -131,12 +131,12 @@ func (scp *SCP) sinkMode(path string, isRecursive bool) int {
 				continue
 			}
 			cwd = pathlib.Join(cwd, args[2])
-			err = scp.Fs.MkdirAll(cwd, os.FileMode(mode))
+			err = scp.Fs.MkdirAll(cwd, 0755)
 			if err != nil {
 				scp.sendReply(scp_ERR)
 				continue
 			}
-			scp.log.WithField("path", cwd).Infof("Server Created directory")
+			scp.log.WithField("path", cwd).Infof("Server Created directory with mode %v", mode)
 			scp.sendReply(scp_OK)
 		case 'E':
 			cwd = pathlib.Dir(cwd)

@@ -55,7 +55,7 @@ func NewSftp(conn io.ReadWriter, vfs afero.Fs, user string, log *log.Entry, quit
 	u := honeyos.GetUser(user)
 	fs := afero.Afero{vfs}
 	if exists, _ := fs.DirExists(u.Homedir); !exists {
-		fs.MkdirAll(u.Homedir, 0600)
+		fs.MkdirAll(u.Homedir, 0755)
 	}
 	return &Sftp{
 		conn:          conn,
@@ -506,8 +506,8 @@ func (sftp *Sftp) closeFile(handle string) error {
 }
 
 func (sftp *Sftp) Mkdir(path string, attr []byte) error {
-	sftp.log.WithField("path", path).Info("Creating directory")
-	return sftp.vfs.Mkdir(path, byteToFileMode(attr))
+	sftp.log.WithField("path", path).Infof("Creating directory with permission %v", byteToFileMode(attr))
+	return sftp.vfs.Mkdir(path, 0755)
 }
 
 func (sftp *Sftp) cleanUp() {

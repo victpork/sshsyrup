@@ -88,7 +88,7 @@ func NewSystem(user, host string, fs afero.Fs, channel ssh.Channel, width, heigh
 	}
 	aferoFs := afero.Afero{fs}
 	if exists, _ := aferoFs.DirExists(usernameMapping[user].Homedir); !exists {
-		aferoFs.MkdirAll(usernameMapping[user].Homedir, 0644)
+		aferoFs.MkdirAll(usernameMapping[user].Homedir, 0755)
 	}
 
 	return &System{

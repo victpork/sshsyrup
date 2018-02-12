@@ -83,7 +83,7 @@ func init() {
 		log.InfoLevel: "logs/activity.log",
 	}
 	if _, err := os.Stat("logs"); os.IsNotExist(err) {
-		os.MkdirAll("logs/sessions", 0777)
+		os.MkdirAll("logs/sessions", 0755)
 	}
 	log.AddHook(lfshook.NewHook(
 		pathMap,
