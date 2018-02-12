@@ -15,6 +15,7 @@ type Shell struct {
 	termSignal chan<- int
 	terminal   *terminal.Terminal
 	sys        *System
+	DelayFunc  func()
 }
 
 func NewShell(sys *System, ipSrc string, log *log.Entry, termSignal chan<- int) *Shell {
@@ -48,6 +49,9 @@ cmdLoop:
 	for {
 		cmd, err := sh.terminal.ReadLine()
 		sh.log.WithField("cmd", cmd).Infof("User input command %v", cmd)
+		if sh.DelayFunc != nil {
+			sh.DelayFunc()
+		}
 		cmd = strings.TrimSpace(cmd)
 		switch {
 		case err != nil:

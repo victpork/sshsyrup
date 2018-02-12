@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"net"
 	"os"
 	"strconv"
@@ -34,6 +35,7 @@ type Config struct {
 	SvrMaxConn      int    `json:"server.maxConnections"`
 	SvrTimeout      int    `json:"server.timeout"`
 	SvrSpeed        int    `json:"server.speed"`
+	SvrDelay        int    `json:"server.processDelay"`
 	SvrHostname     string `json:"server.Hostname"`
 	SvrCmdList      string `json:"server.commandList"`
 	SessionLogFmt   string `json:"server.sessionLogFmt"`
@@ -61,6 +63,7 @@ var (
 		SvrMaxConn:      10,
 		SvrTimeout:      600,
 		SvrSpeed:        -1,
+		SvrDelay:        -1,
 		SvrHostname:     "spr1139",
 		SvrCmdList:      "commands.txt",
 		SessionLogFmt:   "asciinema",
@@ -110,6 +113,8 @@ func init() {
 	}
 	// Load command list
 	honeyos.RegisterFakeCommand(readFiletoArray(config.SvrCmdList))
+	// Randomize seed
+	rand.Seed(time.Now().Unix())
 }
 
 func main() {
@@ -251,4 +256,14 @@ func readFiletoArray(path string) []string {
 		lines = append(lines, sc.Text())
 	}
 	return lines
+}
+	}
+	return lines
+}
+
+func createDelayFunc(base, r int) func() {
+	return func() {
+		sleepTime := base - r + rand.Intn(2*r)
+		time.Sleep(time.Millisecond * time.Duration(sleepTime))
+	}
 }

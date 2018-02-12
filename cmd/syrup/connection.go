@@ -16,19 +16,12 @@ type throttledConntection struct {
 }
 
 const (
-	B int = 1 << (10 * (iota))
-	KB
-	MB
-	GB
-)
-
-const (
 	Burst = 5
 )
 
 func NewThrottledConnection(conn net.Conn, speed int64, timeout time.Duration) net.Conn {
 	if speed > 0 {
-		bucket := limit.NewBucketWithQuantum(time.Second, speed*2, speed)
+		bucket := limit.NewBucketWithQuantum(time.Second, speed, speed)
 		lr := limit.Reader(conn, bucket)
 		lw := limit.Writer(conn, bucket)
 		return &throttledConntection{conn, lr, lw, timeout}

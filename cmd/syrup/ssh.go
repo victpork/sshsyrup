@@ -130,6 +130,10 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 
 					sh = os.NewShell(s.sys, s.src.String(), s.log.WithField("module", "shell"), quitSignal)
 
+					// Create delay function if exists
+					if config.SvrDelay > 0 {
+						sh.DelayFunc = createDelayFunc(config.SvrDelay, 500)
+					}
 					// Create hook for session logger (For recording session to UML/asciinema)
 					var hook termlogger.LogHook
 					if config.SessionLogFmt == "asciinema" {
