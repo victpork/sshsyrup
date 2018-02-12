@@ -83,6 +83,9 @@ func (sys *sysLogWrapper) Err() io.Writer { return stdoutWrapper{sys.StdIOErr.Er
 // NewSystem initializer a system object containing current user context: ID,
 // home directory, terminal dimensions, etc.
 func NewSystem(user, host string, fs afero.Fs, channel ssh.Channel, width, height int, log *log.Entry) *System {
+	if _, exists := IsUserExist(user); !exists {
+		CreateUser(user, "password")
+	}
 	aferoFs := afero.Afero{fs}
 	if exists, _ := aferoFs.DirExists(usernameMapping[user].Homedir); !exists {
 		aferoFs.MkdirAll(usernameMapping[user].Homedir, 0644)
