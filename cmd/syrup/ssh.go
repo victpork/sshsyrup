@@ -60,10 +60,11 @@ func NewSSHSession(nConn net.Conn, sshConfig *ssh.ServerConfig) (*SSHSession, er
 	if err != nil {
 		return nil, err
 	}
-
+	clientIP, port, _ := net.SplitHostPort(conn.RemoteAddr().String())
 	logger := log.WithFields(log.Fields{
 		"user":      conn.User(),
-		"srcIP":     conn.RemoteAddr().String(),
+		"srcIP":     clientIP,
+		"port":      port,
 		"clientStr": string(conn.ClientVersion()),
 		"sessionId": base64.StdEncoding.EncodeToString(conn.SessionID()),
 	})
@@ -251,7 +252,11 @@ func createSessionHandler(c <-chan net.Conn, sshConfig *ssh.ServerConfig) {
 	for conn := range c {
 		sshSession, err := NewSSHSession(conn, sshConfig)
 		if err != nil {
-			log.WithField("srcIP", conn.RemoteAddr().String()).WithError(err).Error("Error establishing SSH connection")
+			clientIP, port, _ := net.SplitHostPort(conn.RemoteAddr().String())
+			log.WithFields(log.Fields{
+				"srcIP": clientIP,
+				"port":  port,
+			}).WithError(err).Error("Error establishing SSH connection")
 		} else {
 			sshSession.handleNewConn()
 		}

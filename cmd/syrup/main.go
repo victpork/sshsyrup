@@ -16,6 +16,7 @@ import (
 
 	"github.com/spf13/viper"
 
+	"github.com/bshuster-repo/logrus-logstash-hook"
 	colorable "github.com/mattn/go-colorable"
 	honeyos "github.com/mkishere/sshsyrup/os"
 	_ "github.com/mkishere/sshsyrup/os/command"
@@ -120,6 +121,18 @@ func init() {
 		&log.JSONFormatter{},
 	))
 
+	// See if logstash is enabled
+	if viper.IsSet("log.logstashEndPt") {
+		conn, err := net.Dial("tcp", viper.GetString("log.logstashEndPt"))
+		if err != nil {
+			log.WithError(err).Fatal("Cannot connect to Logstash server", viper.GetString("log.logstashEndPt"))
+		}
+		hook, err := logrustash.NewHookWithConn(conn, "sshsyrup")
+		if err != nil {
+			log.WithError(err).Fatal("Cannot hook with logstash")
+		}
+		log.AddHook(hook)
+	}
 	// Initalize VFS
 	// ID Mapping
 	//uidMap, gidMap := loadIDMapping(config.VFSUIDMapFile), loadIDMapping(config.VFSGIDMapFile)
@@ -164,11 +177,13 @@ func main() {
 		}, */
 
 		PasswordCallback: func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
+			clientIP, port, _ := net.SplitHostPort(c.RemoteAddr().String())
 			log.WithFields(log.Fields{
-				"user":     c.User(),
-				"srcIP":    c.RemoteAddr().String(),
+				"user":       c.User(),
+				"srcIP":      clientIP,
+				"port":       port,
 				"authMethod": "password",
-				"password": string(pass),
+				"password":   string(pass),
 			}).Info("User trying to login with password")
 
 			if stpass, exists := honeyos.IsUserExist(c.User()); exists && (stpass == string(pass) || stpass == "*") || viper.GetBool("server.allowRandomUser") {
@@ -182,12 +197,14 @@ func main() {
 		},
 
 		PublicKeyCallback: func(c ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
+			clientIP, port, _ := net.SplitHostPort(c.RemoteAddr().String())
 			log.WithFields(log.Fields{
 				"user":              c.User(),
-				"srcIP":             c.RemoteAddr().String(),
+				"srcIP":             clientIP,
+				"port":              port,
 				"pubKeyType":        key.Type(),
 				"pubKeyFingerprint": base64.StdEncoding.EncodeToString(key.Marshal()),
-				"authMethod": "publickey",
+				"authMethod":        "publickey",
 			}).Info("User trying to login with key")
 			return nil, errors.New("Key rejected, revert to password login")
 		},
