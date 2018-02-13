@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -15,7 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/imdario/mergo"
+	"github.com/spf13/viper"
+
 	colorable "github.com/mattn/go-colorable"
 	honeyos "github.com/mkishere/sshsyrup/os"
 	_ "github.com/mkishere/sshsyrup/os/command"
@@ -27,7 +27,7 @@ import (
 )
 
 // Config type is a map for storing config values
-type Config struct {
+/* type Config struct {
 	SvrAddr         string `json:"server.addr"`
 	SvrPort         int    `json:"server.port"`
 	SvrAllowRndUser bool   `json:"server.allowRandomUser"`
@@ -43,19 +43,18 @@ type Config struct {
 	VFSImgFile      string `json:"virtualfs.imageFile"`
 	VFSUIDMapFile   string `json:"virtualfs.uidMappingFile"`
 	VFSGIDMapFile   string `json:"virtualfs.gidMappingFile"`
-	VFSReadOnly     bool   `json:"virtualfs.readOnly"`
 	VFSTempDir      string `json:"virtualfs.SavedFileDir"`
 	AcinemaAPIEndPt string `json:"asciinema.apiEndpoint"`
 	AcinemaAPIKey   string `json:"asciinema.apiKey"`
-}
+} */
 
 const (
 	logTimeFormat string = "20060102"
 )
 
 var (
-	config     = loadConfiguration("config.json")
-	defaultCfg = Config{
+	//config     = loadConfiguration("config.json")
+	/* defaultCfg = Config{
 		SvrAddr:         "0.0.0.0",
 		SvrPort:         2222,
 		SvrAllowRndUser: true,
@@ -73,13 +72,38 @@ var (
 		VFSGIDMapFile:   "group",
 		VFSTempDir:      "tempdir",
 		AcinemaAPIEndPt: "https://asciinema.org",
-	}
+	} */
 	vfs afero.Fs
 )
 
 func init() {
 	// Merge
-	mergo.Merge(&config, defaultCfg)
+	viper.SetDefault("server.addr", "0.0.0.0")
+	viper.SetDefault("server.port", 2222)
+	viper.SetDefault("server.allowRandomUser", true)
+	viper.SetDefault("server.ident", "SSH-2.0-OpenSSH_6.8p1")
+	viper.SetDefault("server.maxTries", 3)
+	viper.SetDefault("server.maxConnections", 10)
+	viper.SetDefault("server.timeout", time.Duration(time.Minute*10))
+	viper.SetDefault("server.speed", -1)
+	viper.SetDefault("server.processDelay", -1)
+	viper.SetDefault("server.hostname", "spr1139")
+	viper.SetDefault("server.commandList", "commands.txt")
+	viper.SetDefault("server.sessionLogFmt", "asciinema")
+	viper.SetDefault("virtualfs.imageFile", "filesystem.zip")
+	viper.SetDefault("virtualfs.uidMappingFile", "passwd")
+	viper.SetDefault("virtualfs.gidMappingFile", "group")
+	viper.SetDefault("virtualfs.savedFileDir", "tempdir")
+	viper.SetDefault("asciinema.apiEndpoint", "https://asciinema.org")
+
+	viper.SetConfigName("config")
+	viper.AddConfigPath("/etc/sshsyrup/")
+	viper.AddConfigPath(".")
+	err := viper.ReadInConfig()
+	if err != nil {
+		panic("Cannot find config, quitting")
+	}
+	//mergo.Merge(&config, defaultCfg)
 
 	if runtime.GOOS == "windows" {
 		log.SetFormatter(&log.TextFormatter{ForceColors: true})
@@ -88,7 +112,7 @@ func init() {
 	pathMap := lfshook.PathMap{
 		log.InfoLevel: "logs/activity.log",
 	}
-	if _, err := os.Stat("logs"); os.IsNotExist(err) {
+	if _, err = os.Stat("logs"); os.IsNotExist(err) {
 		os.MkdirAll("logs/sessions", 0755)
 	}
 	log.AddHook(lfshook.NewHook(
@@ -97,25 +121,26 @@ func init() {
 	))
 
 	// Initalize VFS
-	var err error
 	// ID Mapping
 	//uidMap, gidMap := loadIDMapping(config.VFSUIDMapFile), loadIDMapping(config.VFSGIDMapFile)
-	backupFS := afero.NewBasePathFs(afero.NewOsFs(), config.VFSTempDir)
-	zipfs, err := virtualfs.NewVirtualFS(config.VFSImgFile)
+
+	backupFS := afero.NewBasePathFs(afero.NewOsFs(), viper.GetString("virtualfs.savedFileDir"))
+	zipfs, err := virtualfs.NewVirtualFS(viper.GetString("virtualfs.imageFile"))
 	if err != nil {
 		log.Error("Cannot create virtual filesystem")
 	}
 	vfs = afero.NewCopyOnWriteFs(zipfs, backupFS)
-	err = honeyos.LoadUsers(config.VFSUIDMapFile)
+	err = honeyos.LoadUsers(viper.GetString("virtualfs.uidMappingFile"))
 	if err != nil {
-		log.Errorf("Cannot load user mapping file %v", config.VFSUIDMapFile)
+		log.Errorf("Cannot load user mapping file %v", viper.GetString("virtualfs.uidMappingFile"))
 	}
-	err = honeyos.LoadGroups(config.VFSGIDMapFile)
+
+	err = honeyos.LoadGroups(viper.GetString("virtualfs.uidMappingFile"))
 	if err != nil {
-		log.Errorf("Cannot load group mapping file %v", config.VFSGIDMapFile)
+		log.Errorf("Cannot load group mapping file %v", viper.GetString("virtualfs.uidMappingFile"))
 	}
 	// Load command list
-	honeyos.RegisterFakeCommand(readFiletoArray(config.SvrCmdList))
+	honeyos.RegisterFakeCommand(readFiletoArray(viper.GetString("server.commandList")))
 	// Randomize seed
 	rand.Seed(time.Now().Unix())
 }
@@ -145,7 +170,7 @@ func main() {
 				"password": string(pass),
 			}).Info("User trying to login with password")
 
-			if stpass, exists := honeyos.IsUserExist(c.User()); exists && (stpass == string(pass) || stpass == "*") || config.SvrAllowRndUser {
+			if stpass, exists := honeyos.IsUserExist(c.User()); exists && (stpass == string(pass) || stpass == "*") || viper.GetBool("server.allowRandomUser") {
 				return &ssh.Permissions{
 					Extensions: map[string]string{
 						"permit-agent-forwarding": "yes",
@@ -165,7 +190,7 @@ func main() {
 			return nil, errors.New("Key rejected, revert to password login")
 		},
 
-		ServerVersion: config.SvrVer,
+		ServerVersion: viper.GetString("server.ident"),
 
 		BannerCallback: func(c ssh.ConnMetadata) string {
 			return string(bannerFile)
@@ -186,11 +211,11 @@ func main() {
 
 	connChan := make(chan net.Conn)
 	// Create pool of workers to handle connections
-	for i := 0; i < config.SvrMaxConn; i++ {
+	for i := 0; i < viper.GetInt("server.maxConnections"); i++ {
 		go createSessionHandler(connChan, sshConfig)
 	}
 
-	listener, err := net.Listen("tcp", fmt.Sprintf("%v:%v", config.SvrAddr, config.SvrPort))
+	listener, err := net.Listen("tcp", fmt.Sprintf("%v:%v", viper.GetString("server.addr"), viper.GetInt("server.port")))
 	if err != nil {
 		log.WithError(err).Fatal("Could not create listening socket")
 	}
@@ -198,7 +223,7 @@ func main() {
 
 	for {
 		nConn, err := listener.Accept()
-		tConn := NewThrottledConnection(nConn, int64(config.SvrSpeed), time.Duration(time.Second*time.Duration(config.SvrTimeout)))
+		tConn := NewThrottledConnection(nConn, viper.GetInt64("server.speed"), viper.GetDuration("server.timeout"))
 		log.WithField("srcIP", tConn.RemoteAddr().String()).Info("Connection established")
 		if err != nil {
 			log.WithError(err).Error("Failed to accept incoming connection")
@@ -207,22 +232,6 @@ func main() {
 		connChan <- tConn
 	}
 
-}
-
-func loadConfiguration(file string) Config {
-	var config Config
-	configFile, err := os.Open(file)
-	defer configFile.Close()
-	if err != nil {
-		log.WithField("file", file).WithError(err).Errorf("Cannot open configuration file")
-	}
-
-	jsonParser := json.NewDecoder(configFile)
-	err = jsonParser.Decode(&config)
-	if err != nil {
-		log.WithField("file", file).WithError(err).Errorf("Failed to parse configuration file")
-	}
-	return config
 }
 
 func loadIDMapping(file string) (m map[int]string) {
@@ -238,7 +247,7 @@ func loadIDMapping(file string) (m map[int]string) {
 		fields := strings.Split(buf.Text(), ":")
 		id, err := strconv.ParseInt(fields[2], 10, 32)
 		if err != nil {
-			log.Error("Cannot parse mapping file %v line %v", file, linenum)
+			log.Errorf("Cannot parse mapping file %v line %v", file, linenum)
 			continue
 		}
 		m[int(id)] = fields[0]

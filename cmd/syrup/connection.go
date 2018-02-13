@@ -15,10 +15,6 @@ type throttledConntection struct {
 	Timeout time.Duration
 }
 
-const (
-	Burst = 5
-)
-
 func NewThrottledConnection(conn net.Conn, speed int64, timeout time.Duration) net.Conn {
 	if speed > 0 {
 		bucket := limit.NewBucketWithQuantum(time.Second, speed, speed)

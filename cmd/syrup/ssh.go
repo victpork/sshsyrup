@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/viper"
+
 	os "github.com/mkishere/sshsyrup/os"
 	"github.com/mkishere/sshsyrup/os/command"
 	"github.com/mkishere/sshsyrup/sftp"
@@ -106,7 +108,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 					} else {
 						s.log.WithField("reqType", req.Type).Infof("User requesting pty(%v %vx%v)", ptyreq.Term, ptyreq.Width, ptyreq.Height)
 
-						s.sys = os.NewSystem(s.user, config.SvrHostname, vfs, channel, int(ptyreq.Width), int(ptyreq.Height), s.log)
+						s.sys = os.NewSystem(s.user, viper.GetString("server.hostname"), vfs, channel, int(ptyreq.Width), int(ptyreq.Height), s.log)
 						s.term = ptyreq.Term
 						req.Reply(true, nil)
 					}
@@ -125,34 +127,34 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 				case "shell":
 					s.log.WithField("reqType", req.Type).Info("User requesting shell access")
 					if s.sys == nil {
-						s.sys = os.NewSystem(s.user, config.SvrHostname, vfs, channel, 80, 24, s.log)
+						s.sys = os.NewSystem(s.user, viper.GetString("server.hostname"), vfs, channel, 80, 24, s.log)
 					}
 
 					sh = os.NewShell(s.sys, s.src.String(), s.log.WithField("module", "shell"), quitSignal)
 
 					// Create delay function if exists
-					if config.SvrDelay > 0 {
-						sh.DelayFunc = createDelayFunc(config.SvrDelay, 500)
+					if viper.GetInt("server.delay") > 0 {
+						sh.DelayFunc = createDelayFunc(viper.GetInt("server.delay"), 500)
 					}
 					// Create hook for session logger (For recording session to UML/asciinema)
 					var hook termlogger.LogHook
-					if config.SessionLogFmt == "asciinema" {
+					if viper.GetString("server.sessionLogFmt") == "asciinema" {
 						asciiLogParams := map[string]string{
 							"TERM": s.term,
 							"USER": s.user,
 							"SRC":  s.src.String(),
 						}
 						hook, err = termlogger.NewAsciinemaHook(s.sys.Width(), s.sys.Height(),
-							config.AcinemaAPIEndPt, config.AcinemaAPIKey, asciiLogParams,
+							viper.GetString("asciinema.apiEndpoint"), viper.GetString("asciinema.apiKey"), asciiLogParams,
 							fmt.Sprintf("logs/sessions/%v-%v.cast", s.user, termlogger.LogTimeFormat))
 
-					} else if config.SessionLogFmt == "uml" {
+					} else if viper.GetString("server.sessionLogFmt") == "uml" {
 						hook, err = termlogger.NewUMLHook(0, fmt.Sprintf("logs/sessions/%v-%v.ulm.log", s.user, time.Now().Format(logTimeFormat)))
 					} else {
-						log.Errorf("Session Log option %v not recognized", config.SessionLogFmt)
+						log.Errorf("Session Log option %v not recognized", viper.GetString("server.sessionLogFmt"))
 					}
 					if err != nil {
-						log.Errorf("Cannot create %v log file", config.SessionLogFmt)
+						log.Errorf("Cannot create %v log file", viper.GetString("server.sessionLogFmt"))
 					}
 					// The need of a goroutine here is that PuTTY will wait for reply before acknowledge it enters shell mode
 					go sh.HandleRequest(hook)
@@ -189,7 +191,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 					args := strings.Split(cmd, " ")
 					var sys *os.System
 					if s.sys == nil {
-						sys = os.NewSystem(s.user, config.SvrHostname, vfs, channel, 80, 24, s.log)
+						sys = os.NewSystem(s.user, viper.GetString("server.hostname"), vfs, channel, 80, 24, s.log)
 					} else {
 						sys = s.sys
 					}

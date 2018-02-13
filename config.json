@@ -1,5 +1,8 @@
 {
     "server.addr": "0.0.0.0",
     "server.port": 22,
-    "server.allowRandomUser": false
+    "server.allowRandomUser": false,
+    "server.speed":300,
+    "server.timeout":"10m",
+    "server.processDelay":1500
 }
