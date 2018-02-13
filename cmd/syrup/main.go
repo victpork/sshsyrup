@@ -191,7 +191,11 @@ func main() {
 	for {
 		nConn, err := listener.Accept()
 		tConn := NewThrottledConnection(nConn, viper.GetInt64("server.speed"), viper.GetDuration("server.timeout"))
-		log.WithField("srcIP", tConn.RemoteAddr().String()).Info("Connection established")
+		host, port, _ := net.SplitHostPort(tConn.RemoteAddr().String())
+		log.WithFields(log.Fields{
+			"srcIP": host,
+			"port":  port,
+		}).Info("Connection established")
 		if err != nil {
 			log.WithError(err).Error("Failed to accept incoming connection")
 			continue
