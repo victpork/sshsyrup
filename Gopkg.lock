@@ -2,12 +2,6 @@
 
 
 [[projects]]
-  name = "github.com/bshuster-repo/logrus-logstash-hook"
-  packages = ["."]
-  revision = "dbc1e22735aa6ed7bd9579a407c17bc7c4a4e046"
-  version = "v0.4.1"
-
-[[projects]]
   name = "github.com/fsnotify/fsnotify"
   packages = ["."]
   revision = "c2828203cd70a50dcccfb2761f8b1f8ceef9a8e9"
@@ -155,6 +149,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "8ac710cc27961354bf191f84e91502fb2d1178b848c6ce9e4502b5feb086c386"
+  inputs-digest = "8019a4da8096a5cb88d613f55e41e3dc2dcc21d87b4ba4d9f7950683fd0f332f"
   solver-name = "gps-cdcl"
   solver-version = 1
