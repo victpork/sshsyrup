@@ -16,10 +16,10 @@ import (
 
 	"github.com/spf13/viper"
 
-	"github.com/bshuster-repo/logrus-logstash-hook"
 	colorable "github.com/mattn/go-colorable"
 	honeyos "github.com/mkishere/sshsyrup/os"
 	_ "github.com/mkishere/sshsyrup/os/command"
+	"github.com/mkishere/sshsyrup/util"
 	"github.com/mkishere/sshsyrup/virtualfs"
 	"github.com/rifflock/lfshook"
 	log "github.com/sirupsen/logrus"
@@ -62,7 +62,6 @@ func init() {
 	if err != nil {
 		panic("Cannot find config, quitting")
 	}
-	//mergo.Merge(&config, defaultCfg)
 
 	if runtime.GOOS == "windows" {
 		log.SetFormatter(&log.TextFormatter{ForceColors: true})
@@ -80,14 +79,11 @@ func init() {
 	))
 
 	// See if logstash is enabled
-	if viper.IsSet("log.logstashEndPt") {
-		conn, err := net.Dial("tcp", viper.GetString("log.logstashEndPt"))
+	if viper.IsSet("elastic.endPoint") {
+
+		hook := util.NewElasticHook(viper.GetString("elastic.endPoint"), viper.GetString("elastic.index"), viper.GetString("elastic.pipeline"))
 		if err != nil {
-			log.WithError(err).Fatal("Cannot connect to Logstash server", viper.GetString("log.logstashEndPt"))
-		}
-		hook, err := logrustash.NewHookWithConn(conn, "sshsyrup")
-		if err != nil {
-			log.WithError(err).Fatal("Cannot hook with logstash")
+			log.WithError(err).Fatal("Cannot hook with Elastic")
 		}
 		log.AddHook(hook)
 	}
