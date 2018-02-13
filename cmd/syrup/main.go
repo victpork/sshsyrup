@@ -153,7 +153,7 @@ func main() {
 		bannerFile = []byte{}
 	}
 	sshConfig := &ssh.ServerConfig{
-		AuthLogCallback: func(c ssh.ConnMetadata, method string, err error) {
+		/* AuthLogCallback: func(c ssh.ConnMetadata, method string, err error) {
 			if method != "none" {
 				log.WithFields(log.Fields{
 					"user":       c.User(),
@@ -161,12 +161,13 @@ func main() {
 					"authMethod": method,
 				}).Infof("User trying to login with %v", method)
 			}
-		},
+		}, */
 
 		PasswordCallback: func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
 			log.WithFields(log.Fields{
 				"user":     c.User(),
 				"srcIP":    c.RemoteAddr().String(),
+				"authMethod": "password",
 				"password": string(pass),
 			}).Info("User trying to login with password")
 
@@ -186,6 +187,7 @@ func main() {
 				"srcIP":             c.RemoteAddr().String(),
 				"pubKeyType":        key.Type(),
 				"pubKeyFingerprint": base64.StdEncoding.EncodeToString(key.Marshal()),
+				"authMethod": "publickey",
 			}).Info("User trying to login with key")
 			return nil, errors.New("Key rejected, revert to password login")
 		},

@@ -48,7 +48,9 @@ func (sh *Shell) HandleRequest(hook termlogger.LogHook) {
 cmdLoop:
 	for {
 		cmd, err := sh.terminal.ReadLine()
-		sh.log.WithField("cmd", cmd).Infof("User input command %v", cmd)
+		if len(strings.TrimSpace(cmd)) > 0 {
+			sh.log.WithField("cmd", cmd).Infof("User input command %v", cmd)
+		}
 		if sh.DelayFunc != nil {
 			sh.DelayFunc()
 		}
