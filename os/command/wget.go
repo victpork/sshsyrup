@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	urllib "net/url"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -31,9 +32,8 @@ func printTs() string {
 
 func (wg wget) Exec(args []string, sys os.Sys) int {
 	flag := pflag.NewFlagSet("arg", pflag.ContinueOnError)
-	var out string
-	flag.StringVar(&out, "O", "", "write documents to FILE.")
-
+	out := flag.String("O", "", "write documents to FILE.")
+	quiet := flag.BoolP("quiet", "q", false, "quiet (no output).")
 	flag.SetOutput(sys.Out())
 	err := flag.Parse(args)
 	f := flag.Args()
@@ -50,46 +50,62 @@ func (wg wget) Exec(args []string, sys os.Sys) int {
 		fmt.Fprintln(sys.Out(), "Malformed URL")
 		return 1
 	}
-	if urlobj.Scheme != "http" && urlobj.Scheme != "https" {
-		fmt.Fprintf(sys.Out(), "Resolving %v (%v)... failed: Name or service not known.\n", urlobj.Scheme, urlobj.Scheme)
-		fmt.Fprintf(sys.Out(), "wget: unable to resolve host address ‘%v’\n", urlobj.Scheme)
-		return 1
+	if !*quiet {
+		if urlobj.Scheme != "http" && urlobj.Scheme != "https" {
+			fmt.Fprintf(sys.Out(), "Resolving %v (%v)... failed: Name or service not known.\n", urlobj.Scheme, urlobj.Scheme)
+			fmt.Fprintf(sys.Out(), "wget: unable to resolve host address ‘%v’\n", urlobj.Scheme)
+			return 1
+		}
+		fmt.Fprintf(sys.Out(), "--%v--  %v\n", printTs(), url)
 	}
-	fmt.Fprintf(sys.Out(), "--%v--  %v\n", printTs(), url)
 	ip, err := net.LookupIP(urlobj.Hostname())
 	if err != nil {
 		// handle error
+		fmt.Fprintln(sys.Err(), err)
 	}
-
-	fmt.Fprintf(sys.Out(), "Resolving %v (%v)... %v\n", urlobj.Hostname(), urlobj.Hostname(), ip)
+	if !*quiet {
+		fmt.Fprintf(sys.Out(), "Resolving %v (%v)... %v\n", urlobj.Hostname(), urlobj.Hostname(), ip)
+	}
 	resp, err := http.Get(url)
 	if err != nil {
 		// handle error
+		fmt.Fprintln(sys.Err(), err)
 		return 1
 	}
-	fmt.Fprintf(sys.Out(), "Connecting to %v (%v)|%v|:80... connected\n", urlobj.Hostname(), urlobj.Hostname(), ip[0])
-	mimeType := resp.Header.Get("Content-Type")
-	fmt.Fprintln(sys.Out(), "HTTP request sent, awaiting response... 200 OK")
-	fmt.Fprintf(sys.Out(), "Length: unspecified [%v]\n", mimeType[:strings.LastIndex(mimeType, ";")])
+	if !*quiet {
+		fmt.Fprintf(sys.Out(), "Connecting to %v (%v)|%v|:80... connected\n", urlobj.Hostname(), urlobj.Hostname(), ip[0])
+		mimeType := resp.Header.Get("Content-Type")
+		fmt.Fprintln(sys.Out(), "HTTP request sent, awaiting response... 200 OK")
+		fmt.Fprintf(sys.Out(), "Length: unspecified [%v]\n", mimeType[:strings.LastIndex(mimeType, ";")])
+	}
 	defer resp.Body.Close()
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		//handle
+		fmt.Fprintln(sys.Err(), err)
 		return 1
 	}
-	if out == "" {
-		out = "index.html"
+	if *out == "" {
+		*out = "index.html"
 	}
-	szStr := format(len(b))
-	fmt.Fprintf(sys.Out(), "Saving to: ‘%v’\n\n", out)
-	fmt.Fprintf(sys.Out(), "[ <=>%v ] %v       --.-K/s   in 0.1s\n", strings.Repeat(" ", sys.Width()-38), szStr)
+	if !*quiet {
+		fmt.Fprintf(sys.Out(), "Saving to: ‘%v’\n\n", *out)
+		fmt.Fprintf(sys.Out(), "[ <=>%v ] %v       --.-K/s   in 0.1s\n", strings.Repeat(" ", sys.Width()-38), format(len(b)))
+	}
 	af := afero.Afero{sys.FSys()}
-	err = af.WriteFile(out, b, 0666)
+
+	p := *out
+	if !path.IsAbs(p) {
+		p = path.Join(sys.Getcwd(), p)
+	}
+	err = af.WriteFile(p, b, 0666)
 	if err != nil {
-		//handle
+		fmt.Fprintln(sys.Err(), err)
 		return 1
 	}
-	fmt.Fprintf(sys.Out(), "%v (0.5 KB/s) - ‘%v’ saved[%v]\n", printTs(), out, szStr)
+	if !*quiet {
+		fmt.Fprintf(sys.Out(), "%v (0.5 KB/s) - ‘%v’ saved[%v]\n", printTs(), *out, format(len(b)))
+	}
 	return 0
 }
 
