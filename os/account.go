@@ -2,6 +2,8 @@ package os
 
 import (
 	"bufio"
+	"errors"
+	"math/rand"
 	"os"
 	"strconv"
 	"strings"
@@ -102,4 +104,21 @@ func GetUserByID(id int) User {
 
 func GetGroupByID(id int) Group {
 	return groups[id]
+}
+
+func CreateUser(name, password string) (newUser User, e error) {
+	if _, exists := usernameMapping[name]; exists {
+		return newUser, errors.New("User already exists")
+	}
+	newUser = User{
+		Name:     name,
+		UID:      1000 + rand.Intn(15),
+		GID:      100,
+		Password: password,
+		Shell:    "/bin/bash",
+		Homedir:  "/home/" + name,
+	}
+	usernameMapping[name] = newUser
+	users[newUser.UID] = newUser
+	return
 }

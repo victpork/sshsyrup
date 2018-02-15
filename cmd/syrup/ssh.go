@@ -5,9 +5,14 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
+	"github.com/spf13/viper"
+
 	os "github.com/mkishere/sshsyrup/os"
+	"github.com/mkishere/sshsyrup/os/command"
+	"github.com/mkishere/sshsyrup/sftp"
 	"github.com/mkishere/sshsyrup/util/termlogger"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
@@ -18,10 +23,10 @@ type SSHSession struct {
 	user          string
 	src           net.Addr
 	clientVersion string
-	activity      chan bool
 	sshChan       <-chan ssh.NewChannel
-	ptyReq        *ptyRequest
 	log           *log.Entry
+	sys           *os.System
+	term          string
 }
 
 type envRequest struct {
@@ -55,30 +60,21 @@ func NewSSHSession(nConn net.Conn, sshConfig *ssh.ServerConfig) (*SSHSession, er
 	if err != nil {
 		return nil, err
 	}
-
+	clientIP, port, _ := net.SplitHostPort(conn.RemoteAddr().String())
 	logger := log.WithFields(log.Fields{
 		"user":      conn.User(),
-		"srcIP":     conn.RemoteAddr().String(),
+		"srcIP":     clientIP,
+		"port":      port,
 		"clientStr": string(conn.ClientVersion()),
 		"sessionId": base64.StdEncoding.EncodeToString(conn.SessionID()),
 	})
 	logger.Infof("New SSH connection with client")
-
-	activity := make(chan bool)
-	go func(activity chan bool) {
-		defer nConn.Close()
-		for range activity {
-			// When receive from activity channel, reset deadline
-			nConn.SetReadDeadline(time.Now().Add(config.SvrTimeout))
-		}
-	}(activity)
 
 	go ssh.DiscardRequests(reqs)
 	return &SSHSession{
 		user:          conn.User(),
 		src:           conn.RemoteAddr(),
 		clientVersion: string(conn.ClientVersion()),
-		activity:      activity,
 		sshChan:       chans,
 		log:           logger,
 	}, nil
@@ -97,6 +93,9 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 		for {
 			select {
 			case req := <-in:
+				if req == nil {
+					return
+				}
 				switch req.Type {
 				case "winadj@putty.projects.tartarus.org", "simple@putty.projects.tartarus.org":
 					//Do nothing here
@@ -109,7 +108,9 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 						req.Reply(false, nil)
 					} else {
 						s.log.WithField("reqType", req.Type).Infof("User requesting pty(%v %vx%v)", ptyreq.Term, ptyreq.Width, ptyreq.Height)
-						s.ptyReq = &ptyreq
+
+						s.sys = os.NewSystem(s.user, viper.GetString("server.hostname"), vfs, channel, int(ptyreq.Width), int(ptyreq.Height), s.log)
+						s.term = ptyreq.Term
 						req.Reply(true, nil)
 					}
 				case "env":
@@ -126,36 +127,38 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 					}
 				case "shell":
 					s.log.WithField("reqType", req.Type).Info("User requesting shell access")
-					if s.ptyReq == nil {
-						s.ptyReq = &ptyRequest{
-							Width:  80,
-							Height: 24,
-							Term:   "vt100",
-						}
+					if s.sys == nil {
+						s.sys = os.NewSystem(s.user, viper.GetString("server.hostname"), vfs, channel, 80, 24, s.log)
 					}
-					// The need of a goroutine here is that PuTTY will wait for reply before acknowledge it enters shell mode
+
+					sh = os.NewShell(s.sys, s.src.String(), s.log.WithField("module", "shell"), quitSignal)
+
+					// Create delay function if exists
+					if viper.GetInt("server.delay") > 0 {
+						sh.DelayFunc = createDelayFunc(viper.GetInt("server.delay"), 500)
+					}
+					// Create hook for session logger (For recording session to UML/asciinema)
 					var hook termlogger.LogHook
-					if config.SessionLogFmt == "asciinema" {
+					if viper.GetString("server.sessionLogFmt") == "asciinema" {
 						asciiLogParams := map[string]string{
-							"TERM": s.ptyReq.Term,
+							"TERM": s.term,
 							"USER": s.user,
 							"SRC":  s.src.String(),
 						}
-						hook, err = termlogger.NewAsciinemaHook(int(s.ptyReq.Width), int(s.ptyReq.Height),
-							config.AcinemaAPIEndPt, config.AcinemaAPIKey, asciiLogParams)
+						hook, err = termlogger.NewAsciinemaHook(s.sys.Width(), s.sys.Height(),
+							viper.GetString("asciinema.apiEndpoint"), viper.GetString("asciinema.apiKey"), asciiLogParams,
+							fmt.Sprintf("logs/sessions/%v-%v.cast", s.user, termlogger.LogTimeFormat))
 
-					} else if config.SessionLogFmt == "uml" {
+					} else if viper.GetString("server.sessionLogFmt") == "uml" {
 						hook, err = termlogger.NewUMLHook(0, fmt.Sprintf("logs/sessions/%v-%v.ulm.log", s.user, time.Now().Format(logTimeFormat)))
 					} else {
-						log.Errorf("Session Log option %v not recognized", config.SessionLogFmt)
+						log.Errorf("Session Log option %v not recognized", viper.GetString("server.sessionLogFmt"))
 					}
 					if err != nil {
-						log.Errorf("Cannot create %v log file", config.SessionLogFmt)
+						log.Errorf("Cannot create %v log file", viper.GetString("server.sessionLogFmt"))
 					}
-					tLog := termlogger.NewLogger(hook, channel)
-					defer tLog.Close()
-					sh = os.NewShell(tLog, vfs, int(s.ptyReq.Width), int(s.ptyReq.Height), s.user, s.src.String(), s.log, quitSignal)
-					go sh.HandleRequest()
+					// The need of a goroutine here is that PuTTY will wait for reply before acknowledge it enters shell mode
+					go sh.HandleRequest(hook)
 					req.Reply(true, nil)
 				case "subsystem":
 					subsys := string(req.Payload[4:])
@@ -163,11 +166,18 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 						"reqType":   req.Type,
 						"subSystem": subsys,
 					}).Infof("User requested subsystem %v", subsys)
-					req.Reply(true, nil)
+					if subsys == "sftp" {
+						sftpSrv := sftp.NewSftp(channel, vfs,
+							s.user, s.log.WithField("module", "sftp"), quitSignal)
+						go sftpSrv.HandleRequest()
+						req.Reply(true, nil)
+					} else {
+						req.Reply(false, nil)
+					}
 				case "window-change":
 					s.log.WithField("reqType", req.Type).Info("User shell window size changed")
 					if sh != nil {
-						var winChg *winChgRequest
+						winChg := &winChgRequest{}
 						if err := ssh.Unmarshal(req.Payload, winChg); err != nil {
 							req.Reply(false, nil)
 						}
@@ -179,13 +189,30 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 						"reqType": req.Type,
 						"cmd":     cmd,
 					}).Info("User request remote exec")
-					channel.Write([]byte(fmt.Sprintf("%v: command not found\n", cmd)))
-					quitSignal <- 0
+					args := strings.Split(cmd, " ")
+					var sys *os.System
+					if s.sys == nil {
+						sys = os.NewSystem(s.user, viper.GetString("server.hostname"), vfs, channel, 80, 24, s.log)
+					} else {
+						sys = s.sys
+					}
+					if strings.HasPrefix(args[0], "scp") {
+						scp := command.NewSCP(channel, vfs, s.log.WithField("module", "scp"))
+						go scp.Main(args[1:], quitSignal)
+						req.Reply(true, nil)
+						continue
+					}
+					n, err := sys.Exec(args[0], args[1:])
+					if err != nil {
+						channel.Write([]byte(fmt.Sprintf("%v: command not found\r\n", cmd)))
+					}
+					quitSignal <- n
 					req.Reply(true, nil)
 				default:
 					s.log.WithField("reqType", req.Type).Infof("Unknown channel request type %v", req.Type)
 				}
 			case ret := <-quitSignal:
+				s.log.Info("User closing channel")
 				defer closeChannel(channel, ret)
 				return
 			}
@@ -225,9 +252,14 @@ func createSessionHandler(c <-chan net.Conn, sshConfig *ssh.ServerConfig) {
 	for conn := range c {
 		sshSession, err := NewSSHSession(conn, sshConfig)
 		if err != nil {
-			log.WithField("srcIP", conn.RemoteAddr().String()).WithError(err).Error("Error establishing SSH connection")
+			clientIP, port, _ := net.SplitHostPort(conn.RemoteAddr().String())
+			log.WithFields(log.Fields{
+				"srcIP": clientIP,
+				"port":  port,
+			}).WithError(err).Error("Error establishing SSH connection")
+		} else {
+			sshSession.handleNewConn()
 		}
-		sshSession.handleNewConn()
 		conn.Close()
 	}
 }

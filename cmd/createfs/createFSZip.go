@@ -22,6 +22,7 @@ var (
 	dir       string
 	stripData bool
 	skip      string
+	inputFile string
 )
 
 const (
@@ -42,7 +43,7 @@ func init() {
 	flag.StringVar(&dir, "p", "", "Starting position for the import path")
 	flag.BoolVar(&stripData, "b", true, "Strip file content, if set to true the program will only read metadata from filesystem and skip actual file content in archive.")
 	flag.StringVar(&skip, "k", "", "Paths to be skipped for indexing, separated by semicolons")
-
+	flag.StringVar(&inputFile, "i", "", "Input file for building the image")
 }
 
 func writeExtraUnixInfo(uid, gid uint32, atime, mtime, ctime int64) (b []byte) {

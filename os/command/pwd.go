@@ -16,7 +16,7 @@ func (p pwd) GetHelp() string {
 	return ""
 }
 
-func (p pwd) Exec(args []string, sys *os.System) int {
+func (p pwd) Exec(args []string, sys os.Sys) int {
 	fmt.Fprintln(sys.Out(), sys.Getcwd())
 	return 0
 }
