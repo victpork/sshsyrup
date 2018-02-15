@@ -1,0 +1,13 @@
+[Unit]
+After=network.target auditd.service multi-user.target
+Description=SshSyrup
+
+[Service]
+WorkingDirectory=/opt/sshsyrup
+ExecStart=/opt/sshsyrup/sshsyrup
+KillMode=process
+Restart=always
+RestartSec=2s
+
+[Install]
+WantedBy=multi-user.target
