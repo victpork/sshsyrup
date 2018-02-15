@@ -69,7 +69,8 @@ Put _passwd_ and _group_ file in the same directory as config.json. The format o
 If you want a little more security, you can isolate sshsyrup by using the `Dockerfile` available in the repository.
 It allows you to run sshsyrup in a Docker instance. The current Dockerfile is a two-stage Dockerfile that will first
 compile sshsyrup and generate/copy the required files (`id_rsa`, `filesystem.zip`, `config.json`, sample `group` and
-`passwd` into a clean Docker image (based on [scratch](https://hub.docker.com/_/scratch/), so really lightweight :-)
+`passwd` into a clean Docker image (based on [scratch](https://hub.docker.com/_/scratch/), so really lightweight
+(doesn't even have /bin/sh! :-)
 
 To generate that Docker image, after configuring your config.json file, run :
 ``` 
@@ -84,6 +85,9 @@ the externally listening port :
 ```
 docker run -d -p 9999:22 sshsyrup
 ```
+
+If you want to see what happens (logs) in the Docker instance, get the instance id (`docker ps`) and then
+run `docker logs -f YOUR_INSTANCE_ID`.
 
 ### Configuration parameters
 See [wiki](https://github.com/mkishere/sshsyrup/wiki/Detail-Configuration-Parameters)
