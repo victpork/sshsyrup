@@ -233,8 +233,10 @@ func (s *SSHSession) handleNewConn() {
 				newChannel.Reject(ssh.UnknownChannelType, "Corrupt payload")
 			}
 			s.log.WithFields(log.Fields{
-				"remoteHost": fmt.Sprintf("%v:%v", treq.RemoteHost, treq.RemotePort),
-				"localHost":  fmt.Sprintf("%v:%v", treq.LocalHost, treq.LocalPort),
+				"remoteHost": treq.RemoteHost,
+				"remotePort": treq.RemotePort,
+				"localHost":  treq.LocalHost,
+				"localPort":  treq.LocalPort,
 				"chanType":   newChannel.ChannelType(),
 			}).Info("Trying to establish connection with port forwarding")
 			newChannel.Reject(ssh.Prohibited, "Port forwarding disabled")
