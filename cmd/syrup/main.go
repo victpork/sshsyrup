@@ -61,7 +61,7 @@ func init() {
 
 func main() {
 	pflag.Parse()
-
+	viper.SetEnvPrefix("sshsyrup")
 	viper.SetConfigFile(configPath)
 	err := viper.ReadInConfig()
 	if err != nil {
@@ -69,6 +69,7 @@ func main() {
 		return
 	}
 
+	viper.AutomaticEnv()
 	if runtime.GOOS == "windows" {
 		log.SetFormatter(&log.TextFormatter{ForceColors: true})
 		log.SetOutput(colorable.NewColorableStdout())
