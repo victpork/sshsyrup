@@ -14,8 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/viper"
-
 	colorable "github.com/mattn/go-colorable"
 	honeyos "github.com/mkishere/sshsyrup/os"
 	_ "github.com/mkishere/sshsyrup/os/command"
@@ -24,6 +22,8 @@ import (
 	"github.com/rifflock/lfshook"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -32,11 +32,13 @@ const (
 )
 
 var (
-	vfs afero.Fs
+	vfs        afero.Fs
+	configPath string
 )
 
 func init() {
-	// Merge
+	pflag.StringVarP(&configPath, "config", "c", "config.json", "Specify the location of configuration file")
+
 	viper.SetDefault("server.addr", "0.0.0.0")
 	viper.SetDefault("server.port", 2222)
 	viper.SetDefault("server.allowRandomUser", true)
@@ -55,12 +57,16 @@ func init() {
 	viper.SetDefault("virtualfs.savedFileDir", "tempdir")
 	viper.SetDefault("asciinema.apiEndpoint", "https://asciinema.org")
 
-	viper.SetConfigName("config")
-	viper.AddConfigPath("/etc/sshsyrup/")
-	viper.AddConfigPath(".")
+}
+
+func main() {
+	pflag.Parse()
+
+	viper.SetConfigFile(configPath)
 	err := viper.ReadInConfig()
 	if err != nil {
-		panic("Cannot find config, quitting")
+		fmt.Fprintf(os.Stderr, "Cannot find config file at %v", configPath)
+		return
 	}
 
 	if runtime.GOOS == "windows" {
@@ -109,9 +115,6 @@ func init() {
 	honeyos.RegisterFakeCommand(readFiletoArray(viper.GetString("server.commandList")))
 	// Randomize seed
 	rand.Seed(time.Now().Unix())
-}
-
-func main() {
 
 	// Read banner
 	bannerFile, err := ioutil.ReadFile("banner.txt")
