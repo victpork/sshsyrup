@@ -66,20 +66,16 @@ Put _passwd_ and _group_ file in the same directory as config.json. The format o
 
 ### Running from a Docker instance
 
-If you want a little more security, you can isolate sshsyrup by using the `Dockerfile` available in the repository.
-It allows you to run sshsyrup in a Docker instance. The current Dockerfile is a two-stage Dockerfile that will first
-compile sshsyrup and generate/copy the required files (`id_rsa`, `filesystem.zip`, `config.json`, sample `group` and
-`passwd` into a clean Docker image (based on [scratch](https://hub.docker.com/_/scratch/), so really lightweight
-(doesn't even have /bin/sh! :-)
-
-To generate that Docker image, after configuring your config.json file, run :
-``` 
-  docker build -t sshsyrup .
+Currently there is a Docker image based on the latest build:
+```
+  docker pull mkishere/sshsyrup
 ```
 
-This will generate a new image in your local computer repository. To run it, you will need to know first on which 
+The current Dockerfile is a two-stage Dockerfile that will first compile sshsyrup and generate/copy the required files (`id_rsa`, `filesystem.zip`, `config.json`, sample `group` and `passwd` into a clean Docker image (based on [scratch](https://hub.docker.com/_/scratch/), so really lightweight (doesn't even have /bin/sh! :-)
+
+This will generate a new image in your local computer repository. To run it, you will need to know first on which
 port you want your instance to listen. By default (`config.json`),
-the internal sshsyrup listens on 22. You do not need to change this. Just use the `-p` docker option to change 
+the internal sshsyrup listens on 22. You do not need to change this. Just use the `-p` docker option to change
 the externally listening port :
 
 ```
@@ -116,6 +112,13 @@ Also, each terminal session (the shell) will be logged into a separate file unde
 
 ### Contributing
 Feel free to submit feature request/bug report via the GitHub issue tracker.
+
+For submitting PR, do the following steps:
+1. Fork
+2. Create a branch for the feature/bugfix containing your changes on your fork
+3. Submit PR with your branch
+
+It is advised that creating an issue to discuss the matter in advance if your change is large :)
 
 ### TODO
 - Minimal set of POSIX commands/utilities
