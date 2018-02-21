@@ -15,6 +15,8 @@ type throttledConntection struct {
 	Timeout time.Duration
 }
 
+// NewThrottledConnection creates a throttled connection which is done by
+// https://github.com/juju/ratelimit
 func NewThrottledConnection(conn net.Conn, speed int64, timeout time.Duration) net.Conn {
 	if speed > 0 {
 		bucket := limit.NewBucketWithQuantum(time.Second, speed, speed)
@@ -26,7 +28,9 @@ func NewThrottledConnection(conn net.Conn, speed int64, timeout time.Duration) n
 }
 
 func (tc *throttledConntection) Read(p []byte) (int, error) {
-	defer tc.Conn.SetReadDeadline(time.Now().Add(tc.Timeout))
+	if tc.Timeout > 0 {
+		defer tc.Conn.SetReadDeadline(time.Now().Add(tc.Timeout))
+	}
 	if tc.lr != nil {
 		return tc.lr.Read(p)
 	}
