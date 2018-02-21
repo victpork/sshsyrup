@@ -123,7 +123,7 @@ func main() {
 		}
 		for _, v := range skipPath {
 			if strings.HasPrefix(path, v) {
-				return nil
+				return filepath.SkipDir
 			}
 		}
 		if info == nil {
