@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"path"
 	"runtime"
 	"strconv"
 	"strings"
@@ -37,7 +38,7 @@ var (
 )
 
 func init() {
-	pflag.StringVarP(&configPath, "config", "c", "config.json", "Specify the location of configuration file")
+	pflag.StringVarP(&configPath, "config", "c", ".", "Specify the working directory")
 
 	viper.SetDefault("server.addr", "0.0.0.0")
 	viper.SetDefault("server.port", 2222)
@@ -52,18 +53,20 @@ func init() {
 	viper.SetDefault("server.hostname", "spr1139")
 	viper.SetDefault("server.commandList", "commands.txt")
 	viper.SetDefault("server.sessionLogFmt", "asciinema")
+	viper.SetDefault("server.banner", "banner.txt")
 	viper.SetDefault("virtualfs.imageFile", "filesystem.zip")
 	viper.SetDefault("virtualfs.uidMappingFile", "passwd")
 	viper.SetDefault("virtualfs.gidMappingFile", "group")
 	viper.SetDefault("virtualfs.savedFileDir", "tempdir")
 	viper.SetDefault("asciinema.apiEndpoint", "https://asciinema.org")
-
 }
 
 func main() {
 	pflag.Parse()
 	viper.SetEnvPrefix("sshsyrup")
-	viper.SetConfigFile(configPath)
+	viper.AddConfigPath(configPath)
+	viper.AddConfigPath(".")
+	viper.SetConfigName("config")
 	err := viper.ReadInConfig()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Cannot find config file at %v", configPath)
@@ -99,27 +102,27 @@ func main() {
 	// ID Mapping
 
 	backupFS := afero.NewBasePathFs(afero.NewOsFs(), viper.GetString("virtualfs.savedFileDir"))
-	zipfs, err := virtualfs.NewVirtualFS(viper.GetString("virtualfs.imageFile"))
+	zipfs, err := virtualfs.NewVirtualFS(path.Join(configPath, viper.GetString("virtualfs.imageFile")))
 	if err != nil {
 		log.Error("Cannot create virtual filesystem")
 	}
 	vfs = afero.NewCopyOnWriteFs(zipfs, backupFS)
-	err = honeyos.LoadUsers(viper.GetString("virtualfs.uidMappingFile"))
+	err = honeyos.LoadUsers(path.Join(configPath, viper.GetString("virtualfs.uidMappingFile")))
 	if err != nil {
-		log.Errorf("Cannot load user mapping file %v", viper.GetString("virtualfs.uidMappingFile"))
+		log.Errorf("Cannot load user mapping file %v", path.Join(configPath, viper.GetString("virtualfs.uidMappingFile")))
 	}
 
-	err = honeyos.LoadGroups(viper.GetString("virtualfs.uidMappingFile"))
+	err = honeyos.LoadGroups(path.Join(configPath, viper.GetString("virtualfs.uidMappingFile")))
 	if err != nil {
-		log.Errorf("Cannot load group mapping file %v", viper.GetString("virtualfs.uidMappingFile"))
+		log.Errorf("Cannot load group mapping file %v", path.Join(configPath, viper.GetString("virtualfs.uidMappingFile")))
 	}
 	// Load command list
-	honeyos.RegisterFakeCommand(readFiletoArray(viper.GetString("server.commandList")))
+	honeyos.RegisterFakeCommand(readFiletoArray(path.Join(configPath, viper.GetString("server.commandList"))))
 	// Randomize seed
 	rand.Seed(time.Now().Unix())
 
 	// Read banner
-	bannerFile, err := ioutil.ReadFile("banner.txt")
+	bannerFile, err := ioutil.ReadFile(path.Join(configPath, viper.GetString("server.banner")))
 	if err != nil {
 		bannerFile = []byte{}
 	}
