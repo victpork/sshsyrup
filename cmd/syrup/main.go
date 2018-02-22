@@ -54,6 +54,7 @@ func init() {
 	viper.SetDefault("server.commandList", "commands.txt")
 	viper.SetDefault("server.sessionLogFmt", "asciinema")
 	viper.SetDefault("server.banner", "banner.txt")
+	viper.SetDefault("server.privateKey", "id_rsa")
 	viper.SetDefault("virtualfs.imageFile", "filesystem.zip")
 	viper.SetDefault("virtualfs.uidMappingFile", "passwd")
 	viper.SetDefault("virtualfs.gidMappingFile", "group")
@@ -168,7 +169,7 @@ func main() {
 		},
 	}
 
-	privateBytes, err := ioutil.ReadFile("id_rsa")
+	privateBytes, err := ioutil.ReadFile(path.Join(configPath, viper.GetString("server.privateKey")))
 	if err != nil {
 		log.WithError(err).Fatal("Failed to load private key")
 	}
