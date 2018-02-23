@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	colorable "github.com/mattn/go-colorable"
@@ -35,6 +36,10 @@ const (
 var (
 	vfs        afero.Fs
 	configPath string
+	ipConnCnt  struct {
+		sync.RWMutex
+		m map[string]int
+	}
 )
 
 func init() {
@@ -99,6 +104,12 @@ func main() {
 		}
 		log.AddHook(hook)
 	}
+	// Init connection count map
+	ipConnCnt = struct {
+		sync.RWMutex
+		m map[string]int
+	}{m: make(map[string]int)}
+
 	// Initalize VFS
 	// ID Mapping
 
@@ -195,8 +206,7 @@ func main() {
 
 	for {
 		nConn, err := listener.Accept()
-		tConn := NewThrottledConnection(nConn, viper.GetInt64("server.speed"), viper.GetDuration("server.timeout"))
-		host, port, _ := net.SplitHostPort(tConn.RemoteAddr().String())
+		host, port, _ := net.SplitHostPort(nConn.RemoteAddr().String())
 		log.WithFields(log.Fields{
 			"srcIP": host,
 			"port":  port,
@@ -205,6 +215,19 @@ func main() {
 			log.WithError(err).Error("Failed to accept incoming connection")
 			continue
 		}
+		ipConnCnt.RLock()
+		cnt := ipConnCnt.m[host]
+		ipConnCnt.RUnlock()
+		if cnt >= viper.GetInt("server.maxConnPerHost") {
+			nConn.Close()
+			continue
+		} else {
+			ipConnCnt.Lock()
+			ipConnCnt.m[host] = cnt + 1
+			ipConnCnt.Unlock()
+		}
+		tConn := NewThrottledConnection(nConn, viper.GetInt64("server.speed"), viper.GetDuration("server.timeout"))
+
 		connChan <- tConn
 	}
 

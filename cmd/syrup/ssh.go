@@ -253,8 +253,8 @@ func (s *SSHSession) handleNewConn() {
 func createSessionHandler(c <-chan net.Conn, sshConfig *ssh.ServerConfig) {
 	for conn := range c {
 		sshSession, err := NewSSHSession(conn, sshConfig)
+		clientIP, port, _ := net.SplitHostPort(conn.RemoteAddr().String())
 		if err != nil {
-			clientIP, port, _ := net.SplitHostPort(conn.RemoteAddr().String())
 			log.WithFields(log.Fields{
 				"srcIP": clientIP,
 				"port":  port,
@@ -263,6 +263,16 @@ func createSessionHandler(c <-chan net.Conn, sshConfig *ssh.ServerConfig) {
 			sshSession.handleNewConn()
 		}
 		conn.Close()
+		ipConnCnt.RLock()
+		cnt := ipConnCnt.m[clientIP] - 1
+		ipConnCnt.RUnlock()
+		ipConnCnt.Lock()
+		if cnt > 0 {
+			ipConnCnt.m[clientIP] = cnt
+		} else {
+			delete(ipConnCnt.m, clientIP)
+		}
+		ipConnCnt.Unlock()
 	}
 }
 
