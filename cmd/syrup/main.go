@@ -60,6 +60,7 @@ func init() {
 	viper.SetDefault("server.sessionLogFmt", "asciinema")
 	viper.SetDefault("server.banner", "banner.txt")
 	viper.SetDefault("server.privateKey", "id_rsa")
+	viper.SetDefault("server.portRedirection", "disable")
 	viper.SetDefault("virtualfs.imageFile", "filesystem.zip")
 	viper.SetDefault("virtualfs.uidMappingFile", "passwd")
 	viper.SetDefault("virtualfs.gidMappingFile", "group")

@@ -4,7 +4,9 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -239,7 +241,45 @@ func (s *SSHSession) handleNewConn() {
 				"localPort":  treq.LocalPort,
 				"chanType":   newChannel.ChannelType(),
 			}).Info("Trying to establish connection with port forwarding")
-			newChannel.Reject(ssh.Prohibited, "Port forwarding disabled")
+			if newChannel.ChannelType() == "forwarded-tcpip" {
+				newChannel.Reject(ssh.Prohibited, "Port forwarding disabled")
+				continue
+			}
+			var host string
+			switch viper.GetString("server.portRedirection") {
+			case "disable":
+				newChannel.Reject(ssh.Prohibited, "Port forwarding disabled")
+				continue
+			case "map":
+				portMap := viper.GetStringMap("server.portRedirectionMap")
+				host = portMap[strconv.Itoa(int(treq.RemotePort))].(string)
+			case "direct":
+				host = fmt.Sprintf("%v:%v", treq.RemoteHost, treq.RemotePort)
+			}
+			if len(host) > 0 {
+				ch, req, err := newChannel.Accept()
+				if err != nil {
+					newChannel.Reject(ssh.ResourceShortage, "Cannot create new channel")
+				}
+				go ssh.DiscardRequests(req)
+				go func() {
+					s.log.WithFields(log.Fields{
+						"host": host,
+					}).Infoln("Creating connection to remote server")
+					conn, err := net.Dial("tcp", host)
+					if err != nil {
+						s.log.WithFields(log.Fields{
+							"host": host,
+						}).WithError(err).Error("Cannot create connection")
+						newChannel.Reject(ssh.ConnectionFailed, "Cannot establish connection")
+						return
+					}
+					go io.Copy(conn, ch)
+					go io.Copy(ch, conn)
+				}()
+			} else {
+				newChannel.Reject(ssh.ConnectionFailed, "Malformed channel request")
+			}
 		case "session":
 			go s.handleNewSession(newChannel)
 		default:
