@@ -137,7 +137,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 
 					// Create delay function if exists
 					if viper.GetInt("server.processDelay") > 0 {
-						sh.DelayFunc = createDelayFunc(viper.GetInt("server.delay"), 500)
+						sh.DelayFunc = createDelayFunc(viper.GetInt("server.processDelay"), 500)
 					}
 					// Create hook for session logger (For recording session to UML/asciinema)
 					var hook termlogger.LogHook
