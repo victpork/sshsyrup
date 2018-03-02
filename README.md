@@ -14,7 +14,7 @@ A SSH honeypot with rich features written in Go
 - Structure allows [extending command sets](https://github.com/mkishere/sshsyrup/wiki/Writing-new-commands) with ease
 
 ### See Recorded Session in Action!
-[![asciicast](https://asciinema.org/a/rgr1KyY1Xn21bXIDMKL9fkGD0.png)](https://asciinema.org/a/rgr1KyY1Xn21bXIDMKL9fkGD0)
+[![asciicast](https://asciinema.org/a/yu8fdSXn6v9EV0ozdSjNNN5NJ.png)](https://asciinema.org/a/yu8fdSXn6v9EV0ozdSjNNN5NJ)
 
 ### Requirements
 - Linux, Mac or Windows (I've only tested in Windows/WSL/Linux on ARMv7, suppose the other platforms should work as expected)
