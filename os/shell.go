@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/mattn/go-shellwords"
 	"github.com/mkishere/sshsyrup/util/termlogger"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh/terminal"
@@ -45,6 +46,8 @@ func (sh *Shell) HandleRequest(hook termlogger.LogHook) {
 			sh.termSignal <- 1
 		}
 	}()
+	shellParser := shellwords.NewParser()
+	shellParser.ParseBacktick = false
 	for {
 		cmd, err := sh.terminal.ReadLine()
 		if len(strings.TrimSpace(cmd)) > 0 {
@@ -62,13 +65,27 @@ func (sh *Shell) HandleRequest(hook termlogger.LogHook) {
 			sh.log.WithError(err).Error("Error when reading terminal")
 			break
 		}
-		if strings.Contains(cmd, ";") {
-			cmdList := strings.Split(cmd, ";")
-			for i := range cmdList {
-				sh.ExecCmd(cmdList[i], tLog)
+
+		pos := 0
+		for pos < len(cmd) {
+			cmdList, err := shellParser.Parse(cmd[pos:])
+			if err != nil {
+				sh.terminal.Write([]byte(cmd[pos:] + ": command not found"))
+				break
 			}
-		} else {
-			sh.ExecCmd(cmd, tLog)
+			for i, cmdComp := range cmdList {
+				if strings.Contains(cmdComp, "=") {
+					envVar := strings.SplitN(cmdComp, "=", 1)
+					sh.sys.SetEnv(envVar[0], envVar[1])
+				} else {
+					sh.ExecCmd(strings.Join(cmdList[i:], " "), tLog)
+					break
+				}
+			}
+			if shellParser.Position == -1 {
+				break
+			}
+			pos += shellParser.Position + 1
 		}
 	}
 }
