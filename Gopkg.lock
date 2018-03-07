@@ -48,6 +48,12 @@
   version = "v0.0.3"
 
 [[projects]]
+  name = "github.com/mattn/go-shellwords"
+  packages = ["."]
+  revision = "02e3cf038dcea8290e44424da473dd12be796a8a"
+  version = "v1.0.3"
+
+[[projects]]
   branch = "master"
   name = "github.com/mitchellh/mapstructure"
   packages = ["."]
@@ -149,6 +155,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "8019a4da8096a5cb88d613f55e41e3dc2dcc21d87b4ba4d9f7950683fd0f332f"
+  inputs-digest = "13d33bb12e25bdb7338e3d2b7c04d47ba37a0566e556ab6979c5ff42b9e3964f"
   solver-name = "gps-cdcl"
   solver-version = 1
