@@ -14,6 +14,7 @@ import (
 	"github.com/mkishere/sshsyrup/virtualfs"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
+	"github.com/spf13/viper"
 )
 
 type sftpMsg struct {
@@ -237,6 +238,11 @@ func (sftp *Sftp) HandleRequest() {
 			pos += 8
 			dataLen := int(binary.BigEndian.Uint32(req.Payload[pos:]))
 			pos += 4
+			// Limit total file size
+			if limit := uint64(viper.GetSizeInBytes("server.receiveFileSizeLimit")); limit > 0 && offset+uint64(dataLen) > limit {
+				sftp.sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_FAILURE))
+				continue
+			}
 			err := sftp.writeFile(handle, req.Payload[pos:pos+dataLen], int64(offset))
 			if err != nil {
 				sftp.sendReply(sftp.conn, createStatusMsg(req.ReqID, SSH_FX_FAILURE))

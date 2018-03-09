@@ -13,6 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 )
 
 type SCP struct {
@@ -91,6 +92,11 @@ func (scp *SCP) sinkMode(path string, isRecursive bool) int {
 			mode, err := strconv.ParseInt(args[0][1:], 8, 0)
 			size, err := strconv.ParseInt(args[1], 10, 0)
 			if err != nil {
+				scp.sendReply(scp_ERR)
+				continue
+			}
+			// Reject file size larger than limit
+			if limit := int64(viper.GetSizeInBytes("server.receiveFileSizeLimit")); limit > 0 && size > limit {
 				scp.sendReply(scp_ERR)
 				continue
 			}
