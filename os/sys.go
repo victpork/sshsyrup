@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	pathlib "path"
 
@@ -20,7 +21,7 @@ var (
 
 var (
 	funcMap      = make(map[string]Command)
-	fakeFuncList = make(map[string]struct{})
+	fakeFuncList = make(map[string]string)
 )
 
 var (
@@ -225,14 +226,19 @@ func (sys *System) exec(path string, args []string, io termlogger.StdIOErr) (int
 			res = execFunc.Exec(args, sys)
 		}
 		return res, nil
-	} else if _, inList := fakeFuncList[cmd]; inList {
+	} else if output, inList := fakeFuncList[cmd]; inList {
 		// Print random error message
-		// Make use of golang map rnadom nature :)
-		for msg := range errMsgList {
-			sys.Err().Write([]byte(msg + "\n"))
-			break
+		// Make use of golang map random nature :)
+		if len(output) == 0 {
+			return printRandomError(sys)
 		}
-		return 1, nil
+		// Read file and write output
+		content, err := ioutil.ReadFile(output)
+		if err != nil {
+			return printRandomError(sys)
+		}
+		sys.Out().Write(content)
+		return 0, nil
 	}
 
 	return 127, &os.PathError{Op: "exec", Path: path, Err: os.ErrNotExist}
@@ -249,6 +255,21 @@ func RegisterCommand(name string, cmd Command) {
 // typed in terminal they will print out SegFault
 func RegisterFakeCommand(cmdList []string) {
 	for i := range cmdList {
-		fakeFuncList[cmdList[i]] = struct{}{}
+		fakeFuncList[cmdList[i]] = ""
 	}
+}
+
+// RegisterCommandOutput gets the file content and associate
+// it with the command provided. So that once triggered in
+// console the content will be displayed
+func RegisterCommandOutput(cmd, pathToOutput string) {
+	fakeFuncList[cmd] = pathToOutput
+}
+
+func printRandomError(sys *System) (int, error) {
+	for msg := range errMsgList {
+		sys.Err().Write([]byte(msg + "\n"))
+		break
+	}
+	return 1, nil
 }

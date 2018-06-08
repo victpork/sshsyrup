@@ -61,6 +61,7 @@ func init() {
 	viper.SetDefault("server.banner", "banner.txt")
 	viper.SetDefault("server.privateKey", "id_rsa")
 	viper.SetDefault("server.portRedirection", "disable")
+	viper.SetDefault("server.commandOutputDir", "cmdOutput")
 	viper.SetDefault("virtualfs.imageFile", "filesystem.zip")
 	viper.SetDefault("virtualfs.uidMappingFile", "passwd")
 	viper.SetDefault("virtualfs.gidMappingFile", "group")
@@ -131,6 +132,18 @@ func main() {
 	}
 	// Load command list
 	honeyos.RegisterFakeCommand(readFiletoArray(path.Join(configPath, viper.GetString("server.commandList"))))
+	// Load command output list
+	cmdOutputPath := viper.GetString("server.commandOutputDir")
+	if dp, err := os.Open(cmdOutputPath); err == nil {
+		fileList, err := dp.Readdir(-1)
+		if err == nil {
+			for _, fi := range fileList {
+				if !fi.IsDir() {
+					honeyos.RegisterCommandOutput(fi.Name(), path.Join(cmdOutputPath, fi.Name()))
+				}
+			}
+		}
+	}
 	// Randomize seed
 	rand.Seed(time.Now().Unix())
 
