@@ -79,7 +79,6 @@ func (scp *SCP) sinkMode(path string, isRecursive bool) int {
 		}
 		if err == io.EOF {
 			return 0
-			break
 		}
 		scp.log.Debug(cmd, []byte(cmd))
 		switch cmd[0] {
@@ -154,7 +153,6 @@ func (scp *SCP) sinkMode(path string, isRecursive bool) int {
 		}
 
 	}
-	return 0
 }
 
 // sourceMode is the function to send files/commands to the client side
