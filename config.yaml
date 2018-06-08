@@ -1,0 +1,7 @@
+server:
+  addr: 0.0.0.0           # Host IP
+  port: 22                # Host port
+  allowRandomUser: false  # Allow random user
+  speed: 0                # Speed limit, how fast in kb/s allowed max
+  processDelay: 0         # Introduce process delay after server receive command, unit in ms
+  timeout: 0              # Connection timeout
