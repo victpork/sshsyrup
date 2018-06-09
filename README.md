@@ -35,13 +35,12 @@ go build -ldflags "-s -w" -o createfs ./cmd/createfs
 ```
 
 ### Setting up for the first run
-* Create and modify _config.json_. Here are the sample configuration (minimal setup)
-    ```json
-    {
-        "server.addr": "0.0.0.0",
-        "server.port": 22,
-        "server.allowRandomUser": false
-    }
+* Create and modify _config.yaml_. Here are the sample configuration (minimal setup)
+    ```yaml
+    server:
+        addr: 0.0.0.0           # Host IP
+        port: 22                # Host port
+        allowRandomUser: false  # Allow random user
     ```
 * Prepare the virtual filesystem image by downloading the filesystem.zip from master branch or create your own by running
    ```
