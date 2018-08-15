@@ -3,9 +3,13 @@ package main
 import (
 	"encoding/base64"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"math/rand"
 	"net"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -137,7 +141,11 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 
 					// Create delay function if exists
 					if viper.GetInt("server.processDelay") > 0 {
-						sh.DelayFunc = createDelayFunc(viper.GetInt("server.processDelay"), 500)
+						sh.DelayFunc = func() {
+							r := 500
+							sleepTime := viper.GetInt("server.processDelay") - r + rand.Intn(2*r)
+							time.Sleep(time.Millisecond * time.Duration(sleepTime))
+						}
 					}
 					// Create hook for session logger (For recording session to UML/asciinema)
 					var hook termlogger.LogHook
@@ -321,4 +329,58 @@ func closeChannel(ch ssh.Channel, signal int) {
 	binary.BigEndian.PutUint32(b, uint32(signal))
 	ch.SendRequest("exit-status", false, b)
 	ch.Close()
+}
+
+func ServerConfig() *ssh.ServerConfig {
+	// Read banner
+	bannerFile, err := ioutil.ReadFile(path.Join(configPath, viper.GetString("server.banner")))
+	if err != nil {
+		bannerFile = []byte{}
+	}
+	return &ssh.ServerConfig{
+
+		PasswordCallback: PasswordChallengeGenerator(),
+
+		PublicKeyCallback: func(c ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
+			clientIP, port, _ := net.SplitHostPort(c.RemoteAddr().String())
+			log.WithFields(log.Fields{
+				"user":              c.User(),
+				"srcIP":             clientIP,
+				"port":              port,
+				"pubKeyType":        key.Type(),
+				"pubKeyFingerprint": base64.StdEncoding.EncodeToString(key.Marshal()),
+				"authMethod":        "publickey",
+			}).Info("User trying to login with key")
+			return nil, errors.New("Key rejected, revert to password login")
+		},
+
+		ServerVersion: viper.GetString("server.ident"),
+
+		BannerCallback: func(c ssh.ConnMetadata) string {
+
+			return string(bannerFile)
+		},
+	}
+}
+
+func PasswordChallengeGenerator() (func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error)) {
+	return func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
+		clientIP, port, _ := net.SplitHostPort(c.RemoteAddr().String())
+		log.WithFields(log.Fields{
+			"user":       c.User(),
+			"srcIP":      clientIP,
+			"port":       port,
+			"authMethod": "password",
+			"password":   string(pass),
+		}).Info("User trying to login with password")
+
+		if stpass, exists := os.IsUserExist(c.User()); exists && (stpass == string(pass) || stpass == "*") || viper.GetBool("server.allowRandomUser") {
+			return &ssh.Permissions{
+				Extensions: map[string]string{
+					"permit-agent-forwarding": "yes",
+				},
+			}, nil
+		}
+		return nil, fmt.Errorf("password rejected for %q", c.User())
+	}
 }

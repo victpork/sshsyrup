@@ -2,8 +2,6 @@ package main
 
 import (
 	"bufio"
-	"encoding/base64"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -11,8 +9,6 @@ import (
 	"os"
 	"path"
 	"runtime"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -147,52 +143,7 @@ func main() {
 	// Randomize seed
 	rand.Seed(time.Now().Unix())
 
-	// Read banner
-	bannerFile, err := ioutil.ReadFile(path.Join(configPath, viper.GetString("server.banner")))
-	if err != nil {
-		bannerFile = []byte{}
-	}
-	sshConfig := &ssh.ServerConfig{
-
-		PasswordCallback: func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
-			clientIP, port, _ := net.SplitHostPort(c.RemoteAddr().String())
-			log.WithFields(log.Fields{
-				"user":       c.User(),
-				"srcIP":      clientIP,
-				"port":       port,
-				"authMethod": "password",
-				"password":   string(pass),
-			}).Info("User trying to login with password")
-
-			if stpass, exists := honeyos.IsUserExist(c.User()); exists && (stpass == string(pass) || stpass == "*") || viper.GetBool("server.allowRandomUser") {
-				return &ssh.Permissions{
-					Extensions: map[string]string{
-						"permit-agent-forwarding": "yes",
-					},
-				}, nil
-			}
-			return nil, fmt.Errorf("password rejected for %q", c.User())
-		},
-
-		PublicKeyCallback: func(c ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
-			clientIP, port, _ := net.SplitHostPort(c.RemoteAddr().String())
-			log.WithFields(log.Fields{
-				"user":              c.User(),
-				"srcIP":             clientIP,
-				"port":              port,
-				"pubKeyType":        key.Type(),
-				"pubKeyFingerprint": base64.StdEncoding.EncodeToString(key.Marshal()),
-				"authMethod":        "publickey",
-			}).Info("User trying to login with key")
-			return nil, errors.New("Key rejected, revert to password login")
-		},
-
-		ServerVersion: viper.GetString("server.ident"),
-
-		BannerCallback: func(c ssh.ConnMetadata) string {
-			return string(bannerFile)
-		},
-	}
+	sshConfig := ServerConfig()
 
 	privateBytes, err := ioutil.ReadFile(path.Join(configPath, viper.GetString("server.privateKey")))
 	if err != nil {
@@ -247,28 +198,6 @@ func main() {
 
 }
 
-func loadIDMapping(file string) (m map[int]string) {
-	m = map[int]string{0: "root"}
-	f, err := os.OpenFile(file, os.O_RDONLY, 0666)
-	defer f.Close()
-	if err != nil {
-		return
-	}
-	buf := bufio.NewScanner(f)
-	linenum := 1
-	for buf.Scan() {
-		fields := strings.Split(buf.Text(), ":")
-		id, err := strconv.ParseInt(fields[2], 10, 32)
-		if err != nil {
-			log.Errorf("Cannot parse mapping file %v line %v", file, linenum)
-			continue
-		}
-		m[int(id)] = fields[0]
-		linenum++
-	}
-	return
-}
-
 func readFiletoArray(path string) []string {
 	f, err := os.Open(path)
 	if err != nil {
@@ -281,11 +210,4 @@ func readFiletoArray(path string) []string {
 		lines = append(lines, sc.Text())
 	}
 	return lines
-}
-
-func createDelayFunc(base, r int) func() {
-	return func() {
-		sleepTime := base - r + rand.Intn(2*r)
-		time.Sleep(time.Millisecond * time.Duration(sleepTime))
-	}
 }
