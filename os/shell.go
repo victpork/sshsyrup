@@ -104,6 +104,8 @@ func (sh *Shell) ExecCmd(cmd string, tLog termlogger.StdIOErr) {
 		//Do nothing
 	case cmd == "logout", cmd == "exit":
 		sh.log.Infof("User logged out")
+		sh.terminal.Write([]byte("logout\n"))
+		sh.terminal.SetPrompt("")
 		sh.termSignal <- 0
 		return
 	case strings.HasPrefix(cmd, "cd"):
