@@ -300,6 +300,7 @@ func (s *SSHSession) handleNewConn() {
 
 func createSessionHandler(c <-chan net.Conn, sshConfig *ssh.ServerConfig) {
 	for conn := range c {
+		sshConfig.PasswordCallback = PasswordChallenge(viper.GetInt("server.maxTries"))
 		sshSession, err := NewSSHSession(conn, sshConfig)
 		clientIP, port, _ := net.SplitHostPort(conn.RemoteAddr().String())
 		if err != nil {
@@ -338,9 +339,6 @@ func ServerConfig() *ssh.ServerConfig {
 		bannerFile = []byte{}
 	}
 	return &ssh.ServerConfig{
-
-		PasswordCallback: PasswordChallengeGenerator(),
-
 		PublicKeyCallback: func(c ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
 			clientIP, port, _ := net.SplitHostPort(c.RemoteAddr().String())
 			log.WithFields(log.Fields{
@@ -355,7 +353,7 @@ func ServerConfig() *ssh.ServerConfig {
 		},
 
 		ServerVersion: viper.GetString("server.ident"),
-
+		MaxAuthTries:  viper.GetInt("server.maxTries"),
 		BannerCallback: func(c ssh.ConnMetadata) string {
 
 			return string(bannerFile)
@@ -363,7 +361,8 @@ func ServerConfig() *ssh.ServerConfig {
 	}
 }
 
-func PasswordChallengeGenerator() (func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error)) {
+func PasswordChallenge(tries int) func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
+	triesLeft := tries
 	return func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
 		clientIP, port, _ := net.SplitHostPort(c.RemoteAddr().String())
 		log.WithFields(log.Fields{
@@ -374,13 +373,26 @@ func PasswordChallengeGenerator() (func(c ssh.ConnMetadata, pass []byte) (*ssh.P
 			"password":   string(pass),
 		}).Info("User trying to login with password")
 
-		if stpass, exists := os.IsUserExist(c.User()); exists && (stpass == string(pass) || stpass == "*") || viper.GetBool("server.allowRandomUser") {
-			return &ssh.Permissions{
-				Extensions: map[string]string{
-					"permit-agent-forwarding": "yes",
-				},
-			}, nil
+		successPerm := &ssh.Permissions{
+			Extensions: map[string]string{
+				"permit-agent-forwarding": "yes",
+			},
 		}
+		stpass, userExists := os.IsUserExist(c.User())
+		if userExists && stpass == string(pass) {
+			// Password match
+			return successPerm, nil
+		} else if userExists && (stpass != string(pass) || stpass == "*") || viper.GetBool("server.allowRandomUser") {
+			if viper.GetBool("server.allowRetryLogin") {
+				if triesLeft == 1 {
+					return successPerm, nil
+				}
+				triesLeft--
+			} else {
+				return successPerm, nil
+			}
+		}
+
 		return nil, fmt.Errorf("password rejected for %q", c.User())
 	}
 }
