@@ -32,9 +32,9 @@ before_deploy:
         echo "Failed building createfs for $PLATFORM" && return 1
       fi
       if [ "$GOOS" = "windows" ]; then
-        zip sshsyrup-${TRAVIS_TAG}-${GOOS}-${GOARCH}.zip sshsyrup.exe createfs.exe config.json logs/.gitignore logs/sessions/.gitignore
+        zip sshsyrup-${TRAVIS_TAG}-${GOOS}-${GOARCH}.zip sshsyrup.exe createfs.exe config.yaml logs/.gitignore logs/sessions/.gitignore
       else
-        tar cvzf sshsyrup-${TRAVIS_TAG}-${GOOS}-${GOARCH}.tar.gz sshsyrup createfs config.json logs/.gitignore logs/sessions/.gitignore
+        tar cvzf sshsyrup-${TRAVIS_TAG}-${GOOS}-${GOARCH}.tar.gz sshsyrup createfs config.yaml logs/.gitignore logs/sessions/.gitignore
       fi
     done
   - ls

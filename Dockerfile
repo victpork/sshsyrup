@@ -12,10 +12,10 @@ COPY . ./
 RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags "-s -w" -installsuffix nocgo -o /sshsyrup ./cmd/syrup
 RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags "-s -w" -installsuffix nocgo -o /createfs ./cmd/createfs
 RUN ssh-keygen -t rsa -q -f id_rsa -N "" && cp id_rsa id_rsa.pub /
-RUN cp -r commands.txt config.json group passwd filesystem.zip logs /
+RUN cp -r commands.txt config.yaml group passwd filesystem.zip logs /
 
 FROM scratch
-COPY --from=builder /config.json ./
+COPY --from=builder /config.yaml ./
 COPY --from=builder /filesystem.zip ./
 COPY --from=builder /group ./
 COPY --from=builder /passwd ./
