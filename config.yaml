@@ -1,7 +1,110 @@
 server:
-  addr: 0.0.0.0           # Host IP
-  port: 22                # Host port
-  allowRandomUser: false  # Allow random user
-  speed: 0                # Speed limit, how fast in kb/s allowed max
-  processDelay: 0         # Introduce process delay after server receive command, unit in ms
-  timeout: 0              # Connection timeout
+  # Host IP
+  addr: 0.0.0.0
+
+  # Port Syrup listening to
+  port: 22
+
+  # Fake hostname to be displayed in various commands and prompt
+  hostname: spr1139
+
+  # Allow random user to login
+  allowRandomUser: false
+
+  # Connection max speed in kb/s, 0 for unlimited
+  speed: 0
+
+  # Artifical delay after server returns responses in ms. No delay if set to 0
+  processDelay: 0
+
+  # Connection timeout, 0 for none
+  timeout: 0
+
+  # SSH identification string. Will be shown to clients when they connect
+  ident: SSH-2.0-OpenSSH_6.8p1
+
+  # Max tries allowed for password authentication, if client could not pass 
+  # authentication they will be disconnected
+  maxTries: 3
+
+  # Allow client login after they pass max retry count isntead of disconnecting them
+  allowRetryLogin: false
+
+  # Max connections the server can allowed simultaneously 
+  maxConnections: 10
+
+  # Max connections can allowed per host simultaneously
+  maxConnPerHost: 2
+
+  # Connection timeout after 
+  timeout: 10m
+
+  # commandList points to a text file containing available commands to the honeypot. The shell will
+  # returns Segmentation fault/other random errors instead of file/command not found
+  commandList: commands.txt
+
+  # Session logging format. Can be either asciinema or uml
+  sessionLogFmt: asciinema
+
+  # Banner to be displayed while login
+  banner: banner.txt
+
+  # SSH private key
+  privateKey: id_rsa
+
+  # Redirect connection to specific host when client request SSH tunneling. Available values are:
+  # disabled: Port redirection request will be rejected
+  # direct: Will connect to client specified IP and port, same as in a standard SSH server
+  # map: Ignore the host client provides and map the port defined in portRedirectionMap parameter. See below
+  portRedirection: disabled
+
+  # portRedirectionMap define a mapping from client requested ports to destination. For below example, if client 
+  # requests tunneling to remote host port 25, Syrup will connect them to 192.168.1.117:25 instead
+  portRedirectionMap: 
+    25: 192.168.1.117:25
+    443: 192.168.1.117:447
+
+  # commandOutputDir points to directories containing text files with command name as their filename. When client
+  # type in console it will display the content of the file
+  commandOutputDir: cmdOutput
+
+  # Max size allowed for SCP/SFTP file upload in bytes, unlimited if set to 0
+  receiveFileSizeLimit: 0
+
+virtualfs:
+  # imageFile is a zip file archive containing the files that would be seen in the virtual filesystem
+  imageFile: filesystem.zip
+
+  # uidMappingFile is the username and password file. Format is same as /etc/passwd except that it accepts asterisk(*)
+  # as wildcard
+  uidMappingFile: passwd
+  
+  # gidMappingFile is the group mapping file. Format same as /etc/group
+  gidMappingFile: group
+
+  # savedFileDir stores files written by client to the virtual filesystem
+  savedFileDir: tempdir
+
+# asciinema (https://asciinema.org) is a service that stores and show recorded terminal sessions 
+# asciinema:
+# apiEndpoint points to asciinema.org for uploading client sessions
+#   apiEndpoint: https://asciinema.org
+
+# modify the apiKey to your own asciinema key instead
+#   apiKey: xx
+
+# ElasticSearch endpoint, uncomment and modify the endpoint for Syrup to post logs to Elastic
+# elastic:
+#   endPoint: http://localhost:8080/
+
+# Index for Syrup to post the log to
+#   index: syrup
+
+# Pipeline process for the log to go through. E.g. for doing geolocation resolve
+#   pipeline: ipProc
+
+# (Currently not implemented)
+# API key for posting the IP of client to the AbuseIPDB (https://www.abuseipdb.com)
+# Remove the comment and put in your API key if you want to enable this feature
+# abuseIPDB:
+#   apiKey: xxxxxxx
