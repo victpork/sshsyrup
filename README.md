@@ -35,12 +35,15 @@ go build -ldflags "-s -w" -o createfs ./cmd/createfs
 ```
 
 ### Setting up for the first run
-* Create and modify _config.yaml_. Here are the sample configuration (minimal setup)
+* Modify _config.yaml_. Here is a sample configuration
     ```yaml
     server:
         addr: 0.0.0.0           # Host IP
-        port: 22                # Host port
+        port: 22                # Port listen to
         allowRandomUser: false  # Allow random user
+        speed: 0                # Connection max speed in kb/s
+        processDelay: 0         # Artifical delay after server returns responses in ms
+        timeout: 0              # Connection timeout, 0 for none
     ```
 * Prepare the virtual filesystem image by downloading the filesystem.zip from master branch or create your own by running
    ```
@@ -65,7 +68,7 @@ Put _passwd_ and _group_ file in the same directory as config.json. The format o
 
 ### Running from a Docker instance
 
-Currently there is a Docker image based on the latest build:
+A Docker image based on the latest build:
 ```
   docker pull mkishere/sshsyrup
 ```
@@ -77,7 +80,9 @@ port you want your instance to listen. By default (`config.json`),
 the internal sshsyrup listens on 22. You do not need to change this. Just use the `-p` docker option to change
 the externally listening port :
 
-```
+```sh
+# Map the Syrup container port 22 to external port 9999
+# But you may want to map to port 22 to make your honeypot easier to find
 docker run -d -p 9999:22 sshsyrup
 ```
 
@@ -85,29 +90,18 @@ If you want to see what happens (logs) in the Docker instance, get the instance 
 run `docker logs -f YOUR_INSTANCE_ID`.
 
 ### Configuration parameters
-See [wiki](https://github.com/mkishere/sshsyrup/wiki/Detail-Configuration-Parameters)
+Check out [config.yaml](https://github.com/mkishere/sshsyrup/blob/master/config.yaml)
 ### Logging
 By default Syrup will create a logging file in _logs/_ directory with file name _activity.log_ in JSON format.
 
-Some fields you may interested in:
-
-Field Name | Description
----------- | -----------
-clientStr | Client identification string
-sessionId | Session ID is the unique identifier for each SSH session
-srcIP | Client IP
-time | Log time
-user | User account client used to login
-password | Password used by client to login, only available when logging in
-pubKeyFingerprint | Public key fingerprint client tries to authenticate
-cmd | The command user type in shell
-remoteHost | The remote host client instruct the server to connect to
-localHost | The local host client instruct the server to connect to
-path | The file/directory client is trying to access in SCP/SFTP
-
-Please note that Syrup will no longer append dates to log files. Use a proper log rotation tool (e.g. logrotate) to do the work.
+Please note that Syrup will no longer append dates to log files. Use a proper log rotation tool (e.g. _logrotate_) to do the work.
 
 Also, each terminal session (the shell) will be logged into a separate file under logs/sessions in [asciinema v2 format](https://github.com/asciinema/asciinema/blob/develop/doc/asciicast-v2.md).
+
+### Extending Syrup
+Syrup comes with a framework that helps to implement command easier. By implementing the [Command](https://github.com/mkishere/sshsyrup/blob/dfd91b14bd64f43e8100e3e0fbd6357f29b1708b/os/sys.go#L37) interface you can create your own command and being executed by intruders connecting to your honeypot. For more details refer to the [wiki](https://github.com/mkishere/sshsyrup/wiki/Writing-new-commands).
+
+If your command prints static output every time, you can put the output in _cmdOutput/_, and Syrup will print that when client type the command in terminal.
 
 ### Contributing
 Feel free to submit feature request/bug report via the GitHub issue tracker.

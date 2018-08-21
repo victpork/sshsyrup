@@ -41,7 +41,7 @@ func UploadReport(ip string) {
 
 // ReportIP report to AbuseIPDB regarding IP activities
 func reportIP(ip, reason string, cat []int) error {
-	apikey := viper.GetString("server.abuseIPDBAPIKey")
+	apikey := viper.GetString("abuseIPDB.apiKey")
 	if len(apikey) == 0 {
 		return errors.New("API Key empty")
 	}
