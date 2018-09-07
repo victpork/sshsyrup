@@ -17,19 +17,29 @@ A SSH honeypot with rich features written in Go
 [![asciicast](https://asciinema.org/a/yu8fdSXn6v9EV0ozdSjNNN5NJ.png)](https://asciinema.org/a/yu8fdSXn6v9EV0ozdSjNNN5NJ)
 
 ### Requirements
-- Linux, Mac or Windows (I've only tested in Windows/WSL/Linux on ARMv7, suppose the other platforms should work as expected)
-- Go 1.9 or up (For building)
-- [dep](https://github.com/golang/dep) (For building)
+#### Running
+- Linux, Mac or Windows (I've only tested in Windows/WSL/Linux on ARMv7, the other platforms should work as expected)
+#### Building
+- Go 1.9+ and [dep](https://github.com/golang/dep), or
+- Go 1.11+ and Git
 
 ### Download
 You may find the pre-build packages for various platform on the [release](https://github.com/mkishere/sshsyrup/releases) tab. If you find the platform you need is not on the list, you can follow the building procedure in the next section.
 
 ### Building
-Run the following command in shell to get latest package and build it
+#### Go pre-1.11:
 ```
 go get -u github.com/mkishere/sshsyrup
 cd ~/go/src/github.com/mkishere/sshsyrup
 dep ensure
+go build -ldflags "-s -w" -o sshsyrup ./cmd/syrup
+go build -ldflags "-s -w" -o createfs ./cmd/createfs
+```
+
+#### Go 1.11+:
+Currently building executable is [a bit tricky](https://github.com/golang/go/wiki/Modules#why-does-installing-a-tool-via-go-get-examplecomcmd-fail-with-error-cannot-find-main-module-when-run-with-go111moduleon) in Go 1.11 with module, here is how to do it:
+```
+git clone https://github.com/mkishere/sshsyrup/
 go build -ldflags "-s -w" -o sshsyrup ./cmd/syrup
 go build -ldflags "-s -w" -o createfs ./cmd/createfs
 ```
@@ -73,24 +83,19 @@ A Docker image based on the latest build:
   docker pull mkishere/sshsyrup
 ```
 
-The current Dockerfile is a two-stage Dockerfile that will first compile sshsyrup and generate/copy the required files (`id_rsa`, `filesystem.zip`, `config.json`, sample `group` and `passwd` into a clean Docker image (based on [scratch](https://hub.docker.com/_/scratch/), so really lightweight (doesn't even have /bin/sh! :-)
-
-This will generate a new image in your local computer repository. To run it, you will need to know first on which
-port you want your instance to listen. By default (`config.json`),
-the internal sshsyrup listens on 22. You do not need to change this. Just use the `-p` docker option to change
+By default the internal sshsyrup listens on 22. You do not need to change this. Just use the `-p` docker option to change
 the externally listening port :
-
 ```sh
-# Map the Syrup container port 22 to external port 9999
-# But you may want to map to port 22 to make your honeypot easier to find
 docker run -d -p 9999:22 sshsyrup
 ```
+But you may want to map to port 22 to make your honeypot easier to find.
 
 If you want to see what happens (logs) in the Docker instance, get the instance id (`docker ps`) and then
 run `docker logs -f YOUR_INSTANCE_ID`.
 
 ### Configuration parameters
 Check out [config.yaml](https://github.com/mkishere/sshsyrup/blob/master/config.yaml)
+
 ### Logging
 By default Syrup will create a logging file in _logs/_ directory with file name _activity.log_ in JSON format.
 
@@ -115,5 +120,4 @@ It is advised that creating an issue to discuss the matter in advance if your ch
 
 ### TODO
 - Minimal set of POSIX commands/utilities
-- Port redirection
 - Shell parser
