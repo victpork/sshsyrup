@@ -9,7 +9,6 @@ import (
 	"os"
 	"path"
 	"runtime"
-	"sync"
 	"time"
 
 	colorable "github.com/mattn/go-colorable"
