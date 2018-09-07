@@ -20,6 +20,7 @@ import (
 	"github.com/mkishere/sshsyrup/os/command"
 	"github.com/mkishere/sshsyrup/sftp"
 	"github.com/mkishere/sshsyrup/util/termlogger"
+	"github.com/mkishere/sshsyrup/util/abuseipdb"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
 )
@@ -310,18 +311,12 @@ func createSessionHandler(c <-chan net.Conn, sshConfig *ssh.ServerConfig) {
 			}).WithError(err).Error("Error establishing SSH connection")
 		} else {
 			sshSession.handleNewConn()
+			abuseipdb.CreateProfile(clientIP)
+			abuseipdb.AddCategory(clientIP, abuseipdb.SSH, abuseipdb.Hacking)
 		}
 		conn.Close()
-		ipConnCnt.RLock()
-		cnt := ipConnCnt.m[clientIP] - 1
-		ipConnCnt.RUnlock()
-		ipConnCnt.Lock()
-		if cnt > 0 {
-			ipConnCnt.m[clientIP] = cnt
-		} else {
-			delete(ipConnCnt.m, clientIP)
-		}
-		ipConnCnt.Unlock()
+		ipConnCnt.DecCount(clientIP)
+		abuseipdb.UploadReport(clientIP)
 	}
 }
 

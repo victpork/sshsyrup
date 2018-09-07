@@ -1,11 +1,12 @@
 package abuseipdb
 
 import (
-	"bytes"
+	"bufio"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -19,19 +20,44 @@ var (
 	reportMap = make(map[string]*Profile)
 )
 
+type Category int
+
+const (
+	FraudOrder Category = iota + 3
+	DDosAttack
+	FTPBruteForce
+	PingOfDeath
+	Phishing
+	FraudVoIP
+	OpenProxy
+	WebSpam
+	EmailSpam
+	BlogSpam
+	VPNIP
+	PortScan
+	Hacking
+	SQLInjection
+	Spoofing
+	BruteForce
+	BadWebBot
+	ExploitedHost
+	WebAppAttack
+	SSH
+	IoTTargeted
+)
+
 type Profile struct {
 	IP      string
-	cat     map[int]struct{}
-	comment bytes.Buffer
+	cat     map[Category]struct{}
+	comment *strings.Builder
 }
 
 func CreateProfile(ip string) {
 	reportMap[ip] = createProfile(ip)
 }
 
-func AddBehavior(ip, behavior, cmd string) {
-	profile := reportMap[ip]
-	profile.AddToProfile(behavior, cmd)
+func AddCategory(ip string, cat ...Category) {
+	reportMap[ip].AddCategory(cat)
 }
 
 func UploadReport(ip string) {
@@ -67,31 +93,52 @@ func reportIP(ip, reason string, cat []int) error {
 
 func createProfile(ip string) *Profile {
 	return &Profile{
-		IP:  ip,
-		cat: map[int]struct{}{22: struct{}{}},
+		IP:      ip,
+		cat:     map[Category]struct{}{SSH: struct{}{}},
+		comment: new(strings.Builder),
 	}
 }
 
-func (p *Profile) AddToProfile(action, cmd string) {
+func (p *Profile) CheckCommand(cmd string) {
 	// Extract URL the string is trying to get
-	if strings.Contains(cmd, "wget") || strings.Contains(cmd, "curl") {
+	switch {
+	case strings.Contains(cmd, "wget"), strings.Contains(cmd, "curl"):
 		p.cat[20] = struct{}{}
 		p.comment.WriteString("Attempt to download malicious scripts; ")
 	}
-	if action == "shell" {
-		p.cat[15] = struct{}{}
-		p.comment.WriteString("Attempt to break into ssh; ")
-	}
-	if action == "mail" {
-		p.cat[11] = struct{}{}
-		p.comment.WriteString("Attempt to spam via ssh tunnel")
+}
+
+func (p *Profile) AddCategory(cat []Category) {
+	for _, c := range cat {
+		p.cat[c] = struct{}{}
 	}
 }
 
-func (p *Profile) Report() {
+func (p *Profile) AddReason(reason string) {
+	p.comment.WriteString(reason)
+}
+
+func (p *Profile) Report() error {
 	var catArr []int
 	for cat := range p.cat {
-		catArr = append(catArr, cat)
+		catArr = append(catArr, int(cat))
 	}
-	reportIP(p.IP, p.comment.String(), catArr)
+	return reportIP(p.IP, p.comment.String(), catArr)
+}
+
+// LoadRules load report rules file into memory
+func LoadRules(ruleFilePath string) error {
+	fp, err := os.Open(ruleFilePath)
+	if err != nil {
+		return err
+	}
+	sc := bufio.NewScanner(fp)
+	for sc.Scan() {
+		line := sc.Text()
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
+		
+	}
+	return nil
 }

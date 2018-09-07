@@ -32,10 +32,7 @@ const (
 var (
 	vfs        afero.Fs
 	configPath string
-	ipConnCnt  struct {
-		sync.RWMutex
-		m map[string]int
-	}
+	ipConnCnt *IPConnCount = NewIPConnCount()
 )
 
 func init() {
@@ -103,11 +100,6 @@ func main() {
 		}
 		log.AddHook(hook)
 	}
-	// Init connection count map
-	ipConnCnt = struct {
-		sync.RWMutex
-		m map[string]int
-	}{m: make(map[string]int)}
 
 	// Initalize VFS
 	// ID Mapping
@@ -181,16 +173,12 @@ func main() {
 			log.WithError(err).Error("Failed to accept incoming connection")
 			continue
 		}
-		ipConnCnt.RLock()
-		cnt := ipConnCnt.m[host]
-		ipConnCnt.RUnlock()
+		cnt := ipConnCnt.Read(host)
 		if cnt >= viper.GetInt("server.maxConnPerHost") {
 			nConn.Close()
 			continue
 		} else {
-			ipConnCnt.Lock()
-			ipConnCnt.m[host] = cnt + 1
-			ipConnCnt.Unlock()
+			ipConnCnt.IncCount(host)
 		}
 		tConn := NewThrottledConnection(nConn, viper.GetInt64("server.speed"), viper.GetDuration("server.timeout"))
 

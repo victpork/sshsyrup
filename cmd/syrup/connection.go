@@ -3,6 +3,7 @@ package main
 import (
 	"io"
 	"net"
+	"sync"
 	"time"
 
 	limit "github.com/juju/ratelimit"
@@ -13,6 +14,11 @@ type throttledConntection struct {
 	lr      io.Reader
 	lw      io.Writer
 	Timeout time.Duration
+}
+
+type IPConnCount struct {
+	lock sync.RWMutex
+	m    map[string]int
 }
 
 // NewThrottledConnection creates a throttled connection which is done by
@@ -42,4 +48,32 @@ func (tc *throttledConntection) Write(p []byte) (int, error) {
 		return tc.Conn.Write(p)
 	}
 	return tc.Conn.Write(p)
+}
+
+func NewIPConnCount() *IPConnCount {
+	return &IPConnCount{m: make(map[string]int)}
+}
+
+func (ipc *IPConnCount) Read(clientIP string) int {
+	ipc.lock.RLock()
+	defer ipc.lock.RUnlock()
+	return ipc.m[clientIP] - 1
+}
+
+func (ipc *IPConnCount) IncCount(clientIP string) int {
+	ipc.lock.Lock()
+	defer ipc.lock.Unlock()
+	return ipc.m[clientIP] - 1
+}
+
+func (ipc *IPConnCount) DecCount(clientIP string) {
+	ipc.lock.Lock()
+	defer ipc.lock.Unlock()
+
+	if ipc.m[clientIP] > 0 {
+		ipc.m[clientIP]--
+	} else {
+		delete(ipc.m, clientIP)
+	}
+	return
 }
