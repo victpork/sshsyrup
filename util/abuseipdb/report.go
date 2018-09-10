@@ -2,6 +2,7 @@ package abuseipdb
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -49,7 +50,7 @@ const (
 type Profile struct {
 	IP      string
 	cat     map[Category]struct{}
-	comment *strings.Builder
+	comment bytes.Buffer
 }
 
 func CreateProfile(ip string) {
@@ -93,9 +94,8 @@ func reportIP(ip, reason string, cat []int) error {
 
 func createProfile(ip string) *Profile {
 	return &Profile{
-		IP:      ip,
-		cat:     map[Category]struct{}{SSH: struct{}{}},
-		comment: new(strings.Builder),
+		IP:  ip,
+		cat: map[Category]struct{}{SSH: struct{}{}},
 	}
 }
 
@@ -138,7 +138,7 @@ func LoadRules(ruleFilePath string) error {
 		if strings.HasPrefix(line, "#") {
 			continue
 		}
-		
+
 	}
 	return nil
 }
