@@ -4,6 +4,7 @@ sudo: false
 go:
   - 1.9.x
   - 1.10.x
+  - 1.11.x
   - master
 
 script:
@@ -50,6 +51,6 @@ deploy:
 
   skip_cleanup: true
   on:
-    condition: $TRAVIS_GO_VERSION =~ ^1\.10\.[0-9]+$
+    condition: $TRAVIS_GO_VERSION =~ ^1\.11\.[0-9]+$
     branch: master
     tags: true
