@@ -27,7 +27,7 @@ A SSH honeypot with rich features written in Go
 You may find the pre-build packages for various platform on the [release](https://github.com/mkishere/sshsyrup/releases) tab. If you find the platform you need is not on the list, you can follow the building procedure in the next section.
 
 ### Building
-#### Go pre-1.11:
+#### Go pre-1.11/`GO111MODULE=auto`:
 ```
 go get -u github.com/mkishere/sshsyrup
 cd ~/go/src/github.com/mkishere/sshsyrup
@@ -36,8 +36,8 @@ go build -ldflags "-s -w" -o sshsyrup ./cmd/syrup
 go build -ldflags "-s -w" -o createfs ./cmd/createfs
 ```
 
-#### Go 1.11+:
-Currently building executable is [a bit tricky](https://github.com/golang/go/wiki/Modules#why-does-installing-a-tool-via-go-get-examplecomcmd-fail-with-error-cannot-find-main-module-when-run-with-go111moduleon) in Go 1.11 with module, here is how to do it:
+#### Go 1.11+ with `GO111MODULE=on`:
+Currently building executable with `GO111MODULE=on` is [a bit tricky](https://github.com/golang/go/wiki/Modules#why-does-installing-a-tool-via-go-get-fail-with-error-cannot-find-main-module) in Go 1.11 with module, here is how to do it if you want to leave:
 ```
 git clone https://github.com/mkishere/sshsyrup/
 go build -ldflags "-s -w" -o sshsyrup ./cmd/syrup
@@ -83,10 +83,23 @@ A Docker image based on the latest build:
   docker pull mkishere/sshsyrup
 ```
 
-By default the internal sshsyrup listens on 22. You do not need to change this. Just use the `-p` docker option to change
-the externally listening port :
+By default the internal sshsyrup listens on 22.
+```
+docker run -d mkishere/sshsyrup
+```
+
+The following example shows how you can customize stuff while running Syrup in container:
 ```sh
-docker run -d -p 9999:22 sshsyrup
+docker run -d -p 9999:22 \
+-v /path/to/vfs/image.zip:/filesystem.zip \
+-v /path/to/config.yaml:/config.yaml \
+-v /path/to/logfiles:/logs \
+-v /path/to/group:/group \
+-v /path/to/passwd:/passwd \
+-v /path/to/private_key:/id_rsa \
+-v /path/to/commands.txt:/commands.txt \
+-v /path/to/command_output:/cmdOutput \
+mkishere/sshsyrup
 ```
 But you may want to map to port 22 to make your honeypot easier to find.
 
