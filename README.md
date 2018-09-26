@@ -27,7 +27,7 @@ A SSH honeypot with rich features written in Go
 You may find the pre-build packages for various platform on the [release](https://github.com/mkishere/sshsyrup/releases) tab. If you find the platform you need is not on the list, you can follow the building procedure in the next section.
 
 ### Building
-#### Go pre-1.11/`GO111MODULE=auto`:
+#### Go pre-1.11/1.11 with `GO111MODULE=auto`:
 ```
 go get -u github.com/mkishere/sshsyrup
 cd ~/go/src/github.com/mkishere/sshsyrup
@@ -36,8 +36,8 @@ go build -ldflags "-s -w" -o sshsyrup ./cmd/syrup
 go build -ldflags "-s -w" -o createfs ./cmd/createfs
 ```
 
-#### Go 1.11+ with `GO111MODULE=on`:
-Currently building executable with `GO111MODULE=on` is [a bit tricky](https://github.com/golang/go/wiki/Modules#why-does-installing-a-tool-via-go-get-fail-with-error-cannot-find-main-module) in Go 1.11 with module, here is how to do it if you want to leave:
+#### Go 1.11 with `GO111MODULE=on`:
+Currently building executable with `GO111MODULE=on` is [a bit tricky](https://github.com/golang/go/wiki/Modules#why-does-installing-a-tool-via-go-get-fail-with-error-cannot-find-main-module) in Go 1.11 with module, here is how to do it if you want to leave module on:
 ```
 git clone https://github.com/mkishere/sshsyrup/
 go build -ldflags "-s -w" -o sshsyrup ./cmd/syrup
