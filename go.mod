@@ -5,8 +5,10 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fsnotify/fsnotify v1.4.7 // indirect
 	github.com/golang/protobuf v1.2.0 // indirect
+	github.com/google/pprof v0.0.0-20181002142953-f36417847b1c // indirect
 	github.com/hashicorp/hcl v0.0.0-20171017181929-23c074d0eceb // indirect
 	github.com/hpcloud/tail v1.0.0 // indirect
+	github.com/ianlancetaylor/demangle v0.0.0-20180714043527-fcd258a6f0b4 // indirect
 	github.com/juju/ratelimit v1.0.1
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/magiconair/properties v1.7.4 // indirect
@@ -26,6 +28,7 @@ require (
 	github.com/spf13/pflag v1.0.0
 	github.com/spf13/viper v1.0.0
 	github.com/stretchr/testify v1.2.2 // indirect
+	golang.org/x/arch v0.0.0-20180920145803-b19384d3c130 // indirect
 	golang.org/x/crypto v0.0.0-20180123095555-3d37316aaa6b
 	golang.org/x/net v0.0.0-20180826012351-8a410e7b638d // indirect
 	golang.org/x/sync v0.0.0-20180314180146-1d60e4601c6f // indirect

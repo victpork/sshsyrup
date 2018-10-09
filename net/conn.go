@@ -1,4 +1,4 @@
-package main
+package net
 
 import (
 	"io"
@@ -16,6 +16,7 @@ type throttledConntection struct {
 	Timeout time.Duration
 }
 
+// IPConnCount keep tracks of how many connections allowed per IP
 type IPConnCount struct {
 	lock sync.RWMutex
 	m    map[string]int
@@ -75,5 +76,4 @@ func (ipc *IPConnCount) DecCount(clientIP string) {
 	} else {
 		delete(ipc.m, clientIP)
 	}
-	return
 }

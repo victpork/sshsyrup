@@ -14,6 +14,8 @@ import (
 	colorable "github.com/mattn/go-colorable"
 	honeyos "github.com/mkishere/sshsyrup/os"
 	_ "github.com/mkishere/sshsyrup/os/command"
+	netconn "github.com/mkishere/sshsyrup/net"
+	. "github.com/mkishere/sshsyrup"
 	"github.com/mkishere/sshsyrup/util"
 	"github.com/mkishere/sshsyrup/virtualfs"
 	"github.com/rifflock/lfshook"
@@ -24,14 +26,10 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-const (
-	logTimeFormat string = "20060102"
-)
+
 
 var (
-	vfs        afero.Fs
 	configPath string
-	ipConnCnt *IPConnCount = NewIPConnCount()
 )
 
 func init() {
@@ -83,7 +81,10 @@ func main() {
 		log.InfoLevel: "logs/activity.log",
 	}
 	if _, err = os.Stat("logs"); os.IsNotExist(err) {
-		os.MkdirAll("logs/sessions", 0755)
+		err = os.MkdirAll("logs/sessions", 0755)
+		if err != nil {
+			os.Exit(1)
+		}
 	}
 	log.AddHook(lfshook.NewHook(
 		pathMap,
@@ -108,7 +109,7 @@ func main() {
 	if err != nil {
 		log.Error("Cannot create virtual filesystem")
 	}
-	vfs = afero.NewCopyOnWriteFs(zipfs, backupFS)
+	vfs := afero.NewCopyOnWriteFs(zipfs, backupFS)
 	err = honeyos.LoadUsers(path.Join(configPath, viper.GetString("virtualfs.uidMappingFile")))
 	if err != nil {
 		log.Errorf("Cannot load user mapping file %v", path.Join(configPath, viper.GetString("virtualfs.uidMappingFile")))
@@ -179,8 +180,7 @@ func main() {
 		} else {
 			ipConnCnt.IncCount(host)
 		}
-		tConn := NewThrottledConnection(nConn, viper.GetInt64("server.speed"), viper.GetDuration("server.timeout"))
-
+		tConn := netconn.NewThrottledConnection(nConn, viper.GetInt64("server.speed"), viper.GetDuration("server.timeout"))
 		connChan <- tConn
 	}
 
