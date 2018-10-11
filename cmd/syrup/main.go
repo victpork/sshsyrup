@@ -5,28 +5,21 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/rand"
-	"net"
 	"os"
 	"path"
 	"runtime"
 	"time"
 
 	colorable "github.com/mattn/go-colorable"
+	syrup "github.com/mkishere/sshsyrup"
 	honeyos "github.com/mkishere/sshsyrup/os"
 	_ "github.com/mkishere/sshsyrup/os/command"
-	netconn "github.com/mkishere/sshsyrup/net"
-	. "github.com/mkishere/sshsyrup"
 	"github.com/mkishere/sshsyrup/util"
-	"github.com/mkishere/sshsyrup/virtualfs"
 	"github.com/rifflock/lfshook"
 	log "github.com/sirupsen/logrus"
-	"github.com/spf13/afero"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-	"golang.org/x/crypto/ssh"
 )
-
-
 
 var (
 	configPath string
@@ -101,20 +94,6 @@ func main() {
 		log.AddHook(hook)
 	}
 
-	// Initalize VFS
-	// ID Mapping
-
-	backupFS := afero.NewBasePathFs(afero.NewOsFs(), viper.GetString("virtualfs.savedFileDir"))
-	zipfs, err := virtualfs.NewVirtualFS(path.Join(configPath, viper.GetString("virtualfs.imageFile")))
-	if err != nil {
-		log.Error("Cannot create virtual filesystem")
-	}
-	vfs := afero.NewCopyOnWriteFs(zipfs, backupFS)
-	err = honeyos.LoadUsers(path.Join(configPath, viper.GetString("virtualfs.uidMappingFile")))
-	if err != nil {
-		log.Errorf("Cannot load user mapping file %v", path.Join(configPath, viper.GetString("virtualfs.uidMappingFile")))
-	}
-
 	err = honeyos.LoadGroups(path.Join(configPath, viper.GetString("virtualfs.uidMappingFile")))
 	if err != nil {
 		log.Errorf("Cannot load group mapping file %v", path.Join(configPath, viper.GetString("virtualfs.uidMappingFile")))
@@ -136,21 +115,14 @@ func main() {
 	// Randomize seed
 	rand.Seed(time.Now().Unix())
 
-	sshConfig := ServerConfig(configPath)
-
-	privateBytes, err := ioutil.ReadFile(path.Join(configPath, viper.GetString("server.privateKey")))
+	key, err := ioutil.ReadFile(path.Join(configPath, viper.GetString("server.privateKey")))
 	if err != nil {
 		log.WithError(err).Fatal("Failed to load private key")
 	}
 
-	private, err := ssh.ParsePrivateKey(privateBytes)
-	if err != nil {
-		log.WithError(err).Fatal("Failed to parse private key")
-	}
+	syrupServer := syrup.NewServer(configPath, key)
 
-	sshConfig.AddHostKey(private)
-
-	ListenAndServe(sshConfig)
+	syrupServer.ListenAndServe()
 
 }
 
