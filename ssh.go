@@ -308,7 +308,7 @@ func (s *SSHSession) handleNewConn() {
 	}
 }
 
-func createSessionHandler(c <-chan net.Conn, sshConfig *ssh.ServerConfig, vfs afero.Fs) {
+func CreateSessionHandler(c <-chan net.Conn, sshConfig *ssh.ServerConfig, vfs afero.Fs) {
 	for conn := range c {
 		sshConfig.PasswordCallback = PasswordChallenge(viper.GetInt("server.maxTries"))
 		sshSession, err := NewSSHSession(conn, sshConfig, vfs)
@@ -398,5 +398,41 @@ func PasswordChallenge(tries int) func(c ssh.ConnMetadata, pass []byte) (*ssh.Pe
 		}
 
 		return nil, fmt.Errorf("password rejected for %q", c.User())
+	}
+}
+
+func (sv *ssh.ServerConfig) ListenAndServe() {
+	connChan := make(chan net.Conn)
+	// Create pool of workers to handle connections
+	for i := 0; i < viper.GetInt("server.maxConnections"); i++ {
+		go CreateSessionHandler(connChan, sv, vfs)
+	}
+
+	listener, err := net.Listen("tcp", fmt.Sprintf("%v:%v", viper.GetString("server.addr"), viper.GetInt("server.port")))
+	if err != nil {
+		log.WithError(err).Fatal("Could not create listening socket")
+	}
+	defer listener.Close()
+
+	for {
+		nConn, err := listener.Accept()
+		host, port, _ := net.SplitHostPort(nConn.RemoteAddr().String())
+		log.WithFields(log.Fields{
+			"srcIP": host,
+			"port":  port,
+		}).Info("Connection established")
+		if err != nil {
+			log.WithError(err).Error("Failed to accept incoming connection")
+			continue
+		}
+		cnt := ipConnCnt.Read(host)
+		if cnt >= viper.GetInt("server.maxConnPerHost") {
+			nConn.Close()
+			continue
+		} else {
+			ipConnCnt.IncCount(host)
+		}
+		tConn := netconn.NewThrottledConnection(nConn, viper.GetInt64("server.speed"), viper.GetDuration("server.timeout"))
+		connChan <- tConn
 	}
 }

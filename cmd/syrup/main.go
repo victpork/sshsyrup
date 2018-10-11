@@ -136,7 +136,7 @@ func main() {
 	// Randomize seed
 	rand.Seed(time.Now().Unix())
 
-	sshConfig := ServerConfig()
+	sshConfig := ServerConfig(configPath)
 
 	privateBytes, err := ioutil.ReadFile(path.Join(configPath, viper.GetString("server.privateKey")))
 	if err != nil {
@@ -150,39 +150,7 @@ func main() {
 
 	sshConfig.AddHostKey(private)
 
-	connChan := make(chan net.Conn)
-	// Create pool of workers to handle connections
-	for i := 0; i < viper.GetInt("server.maxConnections"); i++ {
-		go createSessionHandler(connChan, sshConfig)
-	}
-
-	listener, err := net.Listen("tcp", fmt.Sprintf("%v:%v", viper.GetString("server.addr"), viper.GetInt("server.port")))
-	if err != nil {
-		log.WithError(err).Fatal("Could not create listening socket")
-	}
-	defer listener.Close()
-
-	for {
-		nConn, err := listener.Accept()
-		host, port, _ := net.SplitHostPort(nConn.RemoteAddr().String())
-		log.WithFields(log.Fields{
-			"srcIP": host,
-			"port":  port,
-		}).Info("Connection established")
-		if err != nil {
-			log.WithError(err).Error("Failed to accept incoming connection")
-			continue
-		}
-		cnt := ipConnCnt.Read(host)
-		if cnt >= viper.GetInt("server.maxConnPerHost") {
-			nConn.Close()
-			continue
-		} else {
-			ipConnCnt.IncCount(host)
-		}
-		tConn := netconn.NewThrottledConnection(nConn, viper.GetInt64("server.speed"), viper.GetDuration("server.timeout"))
-		connChan <- tConn
-	}
+	ListenAndServe(sshConfig)
 
 }
 
