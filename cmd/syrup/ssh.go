@@ -304,6 +304,8 @@ func createSessionHandler(c <-chan net.Conn, sshConfig *ssh.ServerConfig) {
 		sshConfig.PasswordCallback = PasswordChallenge(viper.GetInt("server.maxTries"))
 		sshSession, err := NewSSHSession(conn, sshConfig)
 		clientIP, port, _ := net.SplitHostPort(conn.RemoteAddr().String())
+		abuseipdb.CreateProfile(clientIP)
+		abuseipdb.AddCategory(clientIP, abuseipdb.SSH, abuseipdb.Hacking)
 		if err != nil {
 			log.WithFields(log.Fields{
 				"srcIP": clientIP,
@@ -311,10 +313,8 @@ func createSessionHandler(c <-chan net.Conn, sshConfig *ssh.ServerConfig) {
 			}).WithError(err).Error("Error establishing SSH connection")
 		} else {
 			sshSession.handleNewConn()
-			abuseipdb.CreateProfile(clientIP)
-			abuseipdb.AddCategory(clientIP, abuseipdb.SSH, abuseipdb.Hacking)
 		}
-		conn.Close()
+		//conn.Close()
 		ipConnCnt.DecCount(clientIP)
 		abuseipdb.UploadReport(clientIP)
 	}
