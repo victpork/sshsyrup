@@ -1,4 +1,4 @@
-package main
+package sshsyrup
 
 import (
 	"encoding/base64"
@@ -16,13 +16,20 @@ import (
 
 	"github.com/spf13/viper"
 
+	netconn "github.com/mkishere/sshsyrup/net"
 	os "github.com/mkishere/sshsyrup/os"
 	"github.com/mkishere/sshsyrup/os/command"
 	"github.com/mkishere/sshsyrup/sftp"
-	"github.com/mkishere/sshsyrup/util/termlogger"
 	"github.com/mkishere/sshsyrup/util/abuseipdb"
+	"github.com/mkishere/sshsyrup/util/termlogger"
+	"github.com/mkishere/sshsyrup/virtualfs"
 	log "github.com/sirupsen/logrus"
+	"github.com/spf13/afero"
 	"golang.org/x/crypto/ssh"
+)
+
+const (
+	logTimeFormat string = "20060102"
 )
 
 // SSHSession stores SSH session info
@@ -34,6 +41,7 @@ type SSHSession struct {
 	log           *log.Entry
 	sys           *os.System
 	term          string
+	fs            afero.Fs
 }
 
 type envRequest struct {
@@ -61,8 +69,17 @@ type tunnelRequest struct {
 	LocalPort  uint32
 }
 
+type Server struct {
+	sshCfg *ssh.ServerConfig
+	vfs    afero.Fs
+}
+
+var (
+	ipConnCnt *netconn.IPConnCount = netconn.NewIPConnCount()
+)
+
 // NewSSHSession create new SSH connection based on existing socket connection
-func NewSSHSession(nConn net.Conn, sshConfig *ssh.ServerConfig) (*SSHSession, error) {
+func NewSSHSession(nConn net.Conn, sshConfig *ssh.ServerConfig, vfs afero.Fs) (*SSHSession, error) {
 	conn, chans, reqs, err := ssh.NewServerConn(nConn, sshConfig)
 	if err != nil {
 		return nil, err
@@ -84,6 +101,7 @@ func NewSSHSession(nConn net.Conn, sshConfig *ssh.ServerConfig) (*SSHSession, er
 		clientVersion: string(conn.ClientVersion()),
 		sshChan:       chans,
 		log:           logger,
+		fs:            vfs,
 	}, nil
 }
 
@@ -116,7 +134,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 					} else {
 						s.log.WithField("reqType", req.Type).Infof("User requesting pty(%v %vx%v)", ptyreq.Term, ptyreq.Width, ptyreq.Height)
 
-						s.sys = os.NewSystem(s.user, viper.GetString("server.hostname"), vfs, channel, int(ptyreq.Width), int(ptyreq.Height), s.log)
+						s.sys = os.NewSystem(s.user, viper.GetString("server.hostname"), s.fs, channel, int(ptyreq.Width), int(ptyreq.Height), s.log)
 						s.term = ptyreq.Term
 						req.Reply(true, nil)
 					}
@@ -135,7 +153,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 				case "shell":
 					s.log.WithField("reqType", req.Type).Info("User requesting shell access")
 					if s.sys == nil {
-						s.sys = os.NewSystem(s.user, viper.GetString("server.hostname"), vfs, channel, 80, 24, s.log)
+						s.sys = os.NewSystem(s.user, viper.GetString("server.hostname"), s.fs, channel, 80, 24, s.log)
 					}
 
 					sh = os.NewShell(s.sys, s.src.String(), s.log.WithField("module", "shell"), quitSignal)
@@ -178,7 +196,7 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 						"subSystem": subsys,
 					}).Infof("User requested subsystem %v", subsys)
 					if subsys == "sftp" {
-						sftpSrv := sftp.NewSftp(channel, vfs,
+						sftpSrv := sftp.NewSftp(channel, s.fs,
 							s.user, s.log.WithField("module", "sftp"), quitSignal)
 						go sftpSrv.HandleRequest()
 						req.Reply(true, nil)
@@ -203,12 +221,12 @@ func (s *SSHSession) handleNewSession(newChan ssh.NewChannel) {
 					args := strings.Split(cmd, " ")
 					var sys *os.System
 					if s.sys == nil {
-						sys = os.NewSystem(s.user, viper.GetString("server.hostname"), vfs, channel, 80, 24, s.log)
+						sys = os.NewSystem(s.user, viper.GetString("server.hostname"), s.fs, channel, 80, 24, s.log)
 					} else {
 						sys = s.sys
 					}
 					if strings.HasPrefix(args[0], "scp") {
-						scp := command.NewSCP(channel, vfs, s.log.WithField("module", "scp"))
+						scp := command.NewSCP(channel, s.fs, s.log.WithField("module", "scp"))
 						go scp.Main(args[1:], quitSignal)
 						req.Reply(true, nil)
 						continue
@@ -299,10 +317,10 @@ func (s *SSHSession) handleNewConn() {
 	}
 }
 
-func createSessionHandler(c <-chan net.Conn, sshConfig *ssh.ServerConfig) {
+func CreateSessionHandler(c <-chan net.Conn, sshConfig *ssh.ServerConfig, vfs afero.Fs) {
 	for conn := range c {
 		sshConfig.PasswordCallback = PasswordChallenge(viper.GetInt("server.maxTries"))
-		sshSession, err := NewSSHSession(conn, sshConfig)
+		sshSession, err := NewSSHSession(conn, sshConfig, vfs)
 		clientIP, port, _ := net.SplitHostPort(conn.RemoteAddr().String())
 		abuseipdb.CreateProfile(clientIP)
 		abuseipdb.AddCategory(clientIP, abuseipdb.SSH, abuseipdb.Hacking)
@@ -327,33 +345,56 @@ func closeChannel(ch ssh.Channel, signal int) {
 	ch.Close()
 }
 
-func ServerConfig() *ssh.ServerConfig {
+func NewServer(configPath string, hostKey []byte) (s Server) {
 	// Read banner
 	bannerFile, err := ioutil.ReadFile(path.Join(configPath, viper.GetString("server.banner")))
 	if err != nil {
 		bannerFile = []byte{}
 	}
-	return &ssh.ServerConfig{
-		PublicKeyCallback: func(c ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
-			clientIP, port, _ := net.SplitHostPort(c.RemoteAddr().String())
-			log.WithFields(log.Fields{
-				"user":              c.User(),
-				"srcIP":             clientIP,
-				"port":              port,
-				"pubKeyType":        key.Type(),
-				"pubKeyFingerprint": base64.StdEncoding.EncodeToString(key.Marshal()),
-				"authMethod":        "publickey",
-			}).Info("User trying to login with key")
-			return nil, errors.New("Key rejected, revert to password login")
-		},
 
-		ServerVersion: viper.GetString("server.ident"),
-		MaxAuthTries:  viper.GetInt("server.maxTries"),
-		BannerCallback: func(c ssh.ConnMetadata) string {
-
-			return string(bannerFile)
-		},
+	// Initalize VFS
+	backupFS := afero.NewBasePathFs(afero.NewOsFs(), viper.GetString("virtualfs.savedFileDir"))
+	zipfs, err := virtualfs.NewVirtualFS(path.Join(configPath, viper.GetString("virtualfs.imageFile")))
+	if err != nil {
+		log.Error("Cannot create virtual filesystem")
 	}
+	vfs := afero.NewCopyOnWriteFs(zipfs, backupFS)
+	err = os.LoadUsers(path.Join(configPath, viper.GetString("virtualfs.uidMappingFile")))
+	if err != nil {
+		log.Errorf("Cannot load user mapping file %v", path.Join(configPath, viper.GetString("virtualfs.uidMappingFile")))
+	}
+
+	s = Server{
+		&ssh.ServerConfig{
+			PublicKeyCallback: func(c ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
+				clientIP, port, _ := net.SplitHostPort(c.RemoteAddr().String())
+				log.WithFields(log.Fields{
+					"user":              c.User(),
+					"srcIP":             clientIP,
+					"port":              port,
+					"pubKeyType":        key.Type(),
+					"pubKeyFingerprint": base64.StdEncoding.EncodeToString(key.Marshal()),
+					"authMethod":        "publickey",
+				}).Info("User trying to login with key")
+				return nil, errors.New("Key rejected, revert to password login")
+			},
+
+			ServerVersion: viper.GetString("server.ident"),
+			MaxAuthTries:  viper.GetInt("server.maxTries"),
+			BannerCallback: func(c ssh.ConnMetadata) string {
+
+				return string(bannerFile)
+			},
+		},
+		vfs,
+	}
+	private, err := ssh.ParsePrivateKey(hostKey)
+	if err != nil {
+		log.WithError(err).Fatal("Failed to parse private key")
+	}
+	s.sshCfg.AddHostKey(private)
+
+	return s
 }
 
 func PasswordChallenge(tries int) func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
@@ -389,5 +430,41 @@ func PasswordChallenge(tries int) func(c ssh.ConnMetadata, pass []byte) (*ssh.Pe
 		}
 
 		return nil, fmt.Errorf("password rejected for %q", c.User())
+	}
+}
+
+func (sc Server) ListenAndServe() {
+	connChan := make(chan net.Conn)
+	// Create pool of workers to handle connections
+	for i := 0; i < viper.GetInt("server.maxConnections"); i++ {
+		go CreateSessionHandler(connChan, sc.sshCfg, sc.vfs)
+	}
+
+	listener, err := net.Listen("tcp", fmt.Sprintf("%v:%v", viper.GetString("server.addr"), viper.GetInt("server.port")))
+	if err != nil {
+		log.WithError(err).Fatal("Could not create listening socket")
+	}
+	defer listener.Close()
+
+	for {
+		nConn, err := listener.Accept()
+		host, port, _ := net.SplitHostPort(nConn.RemoteAddr().String())
+		log.WithFields(log.Fields{
+			"srcIP": host,
+			"port":  port,
+		}).Info("Connection established")
+		if err != nil {
+			log.WithError(err).Error("Failed to accept incoming connection")
+			continue
+		}
+		cnt := ipConnCnt.Read(host)
+		if cnt >= viper.GetInt("server.maxConnPerHost") {
+			nConn.Close()
+			continue
+		} else {
+			ipConnCnt.IncCount(host)
+		}
+		tConn := netconn.NewThrottledConnection(nConn, viper.GetInt64("server.speed"), viper.GetDuration("server.timeout"))
+		connChan <- tConn
 	}
 }
