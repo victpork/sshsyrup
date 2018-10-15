@@ -30,6 +30,9 @@ server:
   # Allow client login after they pass max retry count isntead of disconnecting them
   allowRetryLogin: false
 
+  # Delay between password authentication failure and next retry
+  retryDelay: 2s
+  
   # Max connections the server can allowed simultaneously 
   maxConnections: 10
 

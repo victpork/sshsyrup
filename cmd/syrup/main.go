@@ -34,6 +34,7 @@ func init() {
 	viper.SetDefault("server.ident", "SSH-2.0-OpenSSH_6.8p1")
 	viper.SetDefault("server.maxTries", 3)
 	viper.SetDefault("server.allowRetryLogin", false)
+	viper.SetDefault("server.retryDelay", time.Duration(time.Millisecond*2000))
 	viper.SetDefault("server.maxConnections", 10)
 	viper.SetDefault("server.maxConnPerHost", 2)
 	viper.SetDefault("server.timeout", time.Duration(time.Minute*10))

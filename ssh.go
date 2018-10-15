@@ -428,7 +428,7 @@ func PasswordChallenge(tries int) func(c ssh.ConnMetadata, pass []byte) (*ssh.Pe
 				return successPerm, nil
 			}
 		}
-
+		time.Sleep(viper.GetDuration("server.retryDelay"))
 		return nil, fmt.Errorf("password rejected for %q", c.User())
 	}
 }
