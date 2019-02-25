@@ -18,6 +18,7 @@ COPY --from=builder /id_rsa ./
 COPY --from=builder /commands.txt ./
 COPY --from=builder /sshsyrup ./
 COPY --from=builder /cmdOutput ./cmdOutput
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 ENTRYPOINT ["./sshsyrup"]
 

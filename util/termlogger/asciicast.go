@@ -117,8 +117,14 @@ func (aLog *AsciinemaHook) upload() (string, error) {
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.Header.Add("User-Agent", "SyrupSSH/1.0.0")
 	rsp, err := aLog.htClient.Do(req)
+	if err != nil {
+		return "", err
+	}
 	body := &bytes.Buffer{}
 	_, err = body.ReadFrom(rsp.Body)
+	if err != nil {
+		return "", err
+	}
 	rsp.Body.Close()
 	return string(body.Bytes()), err
 }
